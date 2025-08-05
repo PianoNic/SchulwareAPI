@@ -65,6 +65,12 @@ app = FastAPI(
 # Store the current access token (in a real app, use proper storage like Redis)
 current_access_token = None
 
+# Health check endpoint for Docker monitoring
+@app.get("/health", tags=["System"])
+async def health_check():
+    """Health check endpoint for monitoring the service status."""
+    return {"status": "healthy", "service": "SchulwareAPI"}
+
 # Login endpoint
 @app.post("/authorize", tags=["Authorization"])
 async def login_and_get_token(email: str = Form(...), password: str = Form(...)):
