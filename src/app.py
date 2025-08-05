@@ -3,9 +3,10 @@ import os
 import httpx
 import asyncio
 import concurrent.futures
-from fastapi import FastAPI, Request, HTTPException, Response, Form
+from fastapi import FastAPI, Request, HTTPException, Response, Form, Security, Depends
 from fastapi.responses import JSONResponse
-from typing import Dict, Any, List
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from typing import Dict, Any, List, Optional
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -54,6 +55,9 @@ def load_endpoints(file_path: str) -> List[Dict[str, Any]]:
 
 endpoints = load_endpoints("endpoints.json")
 
+# Initialize the security scheme
+security = HTTPBearer()
+
 app = FastAPI(
     title="Schulnetz API Wrapper",
     description="A FastAPI application to wrap Schulnetz API endpoints.",
@@ -62,20 +66,15 @@ app = FastAPI(
     docs_url="/"
 )
 
-# Store the current access token (in a real app, use proper storage like Redis)
-current_access_token = None
-
 # Health check endpoint for Docker monitoring
 @app.get("/health", tags=["System"])
 async def health_check():
     """Health check endpoint for monitoring the service status."""
     return {"status": "healthy", "service": "SchulwareAPI"}
 
-# Login endpoint
-@app.post("/authorize", tags=["Authorization"])
-async def login_and_get_token(email: str = Form(...), password: str = Form(...)):
-    """Login with email and password to get access token."""
-    global current_access_token
+@app.post("/authenticate", tags=["Authorization"])
+async def authenticate_and_get_token(email: str = Form(...), password: str = Form(...)):
+    """Login with email and password to get access token. Use this token in the 'Authorize' button."""
     
     if not email or not password:
         raise HTTPException(status_code=400, detail="Email and password are required")
@@ -95,11 +94,9 @@ async def login_and_get_token(email: str = Form(...), password: str = Form(...))
             )
         
         if result.get("success") and result.get("access_token"):
-            current_access_token = result["access_token"]
+            access_token = result["access_token"]
             return {
-                "message": "Login successful", 
-                "access_token": current_access_token,
-                "token_length": len(current_access_token)
+                "access_token": access_token,
             }
         else:
             raise HTTPException(
@@ -110,23 +107,10 @@ async def login_and_get_token(email: str = Form(...), password: str = Form(...))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Authentication error: {str(e)}")
 
-# Get current token status
-@app.get("/status", tags=["Authorization"])
-async def get_token_status():
-    """Get the current authorization status."""
-    return {
-        "has_token": current_access_token is not None,
-        "token_length": len(current_access_token) if current_access_token else 0,
-        "token_preview": current_access_token[:10] + "..." if current_access_token else None
-    }
-
-# Clear access token
-@app.delete("/authorize/clear", tags=["Authorization"])
-async def clear_access_token():
-    """Clear the current access token."""
-    global current_access_token
-    current_access_token = None
-    return {"message": "Access token cleared successfully"}
+# Optional: Function to validate bearer token (for dependency injection)
+async def get_current_token(credentials: HTTPAuthorizationCredentials = Security(security)) -> str:
+    """Extract and return the bearer token from request headers."""
+    return credentials.credentials
 
 
 # HTTPX client for making async requests
@@ -148,16 +132,20 @@ for endpoint_config in endpoints:
     path = endpoint_config["path"]
     method = endpoint_config["method"].lower()
     url_path_suffix = endpoint_config["url_path"]
-    allowed_query_params = endpoint_config.get("query_params", [])    # Define the handler function as a closure
+    allowed_query_params = endpoint_config.get("query_params", [])
+
+    # Define the handler function as a closure
     def create_handler(current_endpoint_config: Dict[str, Any]):
-        async def handler(request: Request):
+        async def handler(request: Request, token: str = Depends(get_current_token)):
             target_url_path = current_endpoint_config["url_path"]
             target_base_url = None
-            request_headers = {}            # Determine base URL and headers based on the target_url_path
+            request_headers = {}
+
+            # Determine base URL and headers based on the target_url_path
             if target_url_path.startswith("/rest/v1/"):
                 target_base_url = SCHULNETZ_API_BASE_URL
-                # Use stored access token if available, otherwise fall back to API key
-                auth_token = current_access_token if current_access_token else SCHULNETZ_API_KEY
+                # Use the token from authorization header, fallback to API key if no valid token
+                auth_token = token if token else SCHULNETZ_API_KEY
                 request_headers = {
                     "Referer": "https://schulnetz.web.app/",
                     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
