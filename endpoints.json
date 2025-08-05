@@ -1,0 +1,93 @@
+[
+    {
+        "name": "me",
+        "path": "/me",
+        "method": "GET",
+        "url_path": "/rest/v1/me",
+        "query_params": []
+    },
+    {
+        "name": "translations",
+        "path": "/config/translations",
+        "method": "GET",
+        "url_path": "/rest/v1/config/translations",
+        "query_params": [
+            "filter"
+        ]
+    },
+    {
+        "name": "settings",
+        "path": "/config/settings",
+        "method": "GET",
+        "url_path": "/rest/v1/config/settings",
+        "query_params": []
+    },
+    {
+        "name": "ngsw_json",
+        "path": "/ngsw.json",
+        "method": "GET",
+        "url_path": "/ngsw.json",
+        "query_params": [
+            "ngsw-cache-bust"
+        ]
+    },
+    {
+        "name": "me_events",
+        "path": "/me/events",
+        "method": "GET",
+        "url_path": "/rest/v1/me/events",
+        "query_params": [
+            "min_date",
+            "max_date"
+        ]
+    },
+    {
+        "name": "me_absences",
+        "path": "/me/absences",
+        "method": "GET",
+        "url_path": "/rest/v1/me/absences",
+        "query_params": []
+    },
+    {
+        "name": "me_absencenotices",
+        "path": "/me/absencenotices",
+        "method": "GET",
+        "url_path": "/rest/v1/me/absencenotices",
+        "query_params": []
+    },
+    {
+        "name": "absence_notice_status",
+        "path": "/config/lists/absenceNoticeStatus",
+        "method": "GET",
+        "url_path": "/rest/v1/config/lists/absenceNoticeStatus",
+        "query_params": []
+    },
+    {
+        "name": "me_exams",
+        "path": "/me/exams",
+        "method": "GET",
+        "url_path": "/rest/v1/me/exams",
+        "query_params": []
+    },
+    {
+        "name": "me_grades",
+        "path": "/me/grades",
+        "method": "GET",
+        "url_path": "/rest/v1/me/grades",
+        "query_params": []
+    },
+    {
+        "name": "me_notifications_push",
+        "path": "/me/notifications/push",
+        "method": "GET",
+        "url_path": "/rest/v1/me/notifications/push",
+        "query_params": []
+    },
+    {
+        "name": "me_notifications_topics",
+        "path": "/me/notifications/topics",
+        "method": "GET",
+        "url_path": "/rest/v1/me/notifications/topics",
+        "query_params": []
+    }
+]
