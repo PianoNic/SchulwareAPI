@@ -7,6 +7,7 @@
 </p>
 <p align="center">
   <a href="https://github.com/PianoNic/SchulwareAPI"><img src="https://badgetrack.pianonic.ch/badge?tag=schulware-api&label=visits&color=243aae&style=flat" alt="visits"/></a>
+  <a href="https://github.com/PianoNic/SchulwareAPI/blob/main/LICENSE"><img src="https://img.shields.io/github/license/PianoNic/SchulwareAPI?color=243aae&label=License"/></a>
   <a href="https://github.com/PianoNic/SchulwareAPI/releases"><img src="https://img.shields.io/github/v/release/PianoNic/SchulwareAPI?include_prereleases&color=243aae&label=Latest%20Release"/></a>
   <a href="#-installation"><img src="https://img.shields.io/badge/Selfhost-Instructions-243aae.svg"/></a>
 </p>
