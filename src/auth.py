@@ -11,34 +11,24 @@ from dotenv import load_dotenv
 
 from playwright.sync_api import sync_playwright, Page, expect
 
-# Load environment variables from .env file
 load_dotenv()
 
-# --- Configuration from Environment Variables (non-sensitive only) ---
 SCHULNETZ_CLIENT_ID = os.getenv("SCHULNETZ_CLIENT_ID")
 REDIRECT_URI = os.getenv("REDIRECT_URI")
 
-# Validate required environment variables
 if not all([SCHULNETZ_CLIENT_ID, REDIRECT_URI]):
-    raise EnvironmentError("Missing required environment variables. Please check your .env file.")
+    raise EnvironmentError("Missing required environment variables.")
 
-
-# --- Helper Functions (mostly unchanged) ---
 def generate_random_string(length):
-    """Generate a random alphanumeric string."""
     return "".join(
         secrets.choice(string.ascii_letters + string.digits) for _ in range(length)
     )
 
 
 def generate_pkce_challenge():
-    """Generate code_verifier and code_challenge for PKCE."""
-    code_verifier = generate_random_string(128)  # PKCE recommends 43-128 chars
+    code_verifier = generate_random_string(128)
     s256 = hashlib.sha256(code_verifier.encode("utf-8")).digest()
-    # base64url encoding (RFC 4648 section 5)
-    code_challenge = (
-        base64.urlsafe_b64encode(s256).decode("utf-8").rstrip("=")
-    )
+    code_challenge = (base64.urlsafe_b64encode(s256).decode("utf-8").rstrip("="))
     return code_verifier, code_challenge
 
 
@@ -54,29 +44,18 @@ def handle_microsoft_login(page: Page, email: str, password: str) -> None:
         email_input_selector = 'input[type="email"], input[name="loginfmt"]'
         expect(page.locator(email_input_selector)).to_be_visible(timeout=20000)
         page.fill(email_input_selector, email)
-        page.press(email_input_selector, "Enter") # Simulate pressing Enter after filling
-        # Alternatively, click the 'Next' button if present
-        # page.click('input[type="submit"][value="Next"], button#idSIButton9')
+        page.press(email_input_selector, "Enter")
 
         print("  Entering Microsoft password...")
-        # Wait for the password input field to appear after email submission
         password_input_selector = 'input[type="password"], input[name="passwd"]'
         expect(page.locator(password_input_selector)).to_be_visible(timeout=20000)
         page.fill(password_input_selector, password)
         page.press(password_input_selector, "Enter")
-        # Alternatively, click the 'Sign in' button
-        # page.click('input[type="submit"][value="Sign in"], button#idSIButton9')        print("  Checking for 'Stay signed in?' prompt...")
-        # Handle "Stay signed in?" prompt if it appears
   
         try:
-            # Wait for either 'Yes' or 'No' button, and click 'Yes' (Ja)
-            # Based on your HTML: #idSIButton9 is "Ja" (Yes), #idBtn_Back is "Nein" (No)
             stay_signed_in_button_yes = page.locator('#idSIButton9')
             stay_signed_in_button_no = page.locator('#idBtn_Back')
 
-
-
-            # Wait for at least one of them to appear, but don't fail if neither does (it might skip this)
             if stay_signed_in_button_yes.is_visible(timeout=5000):
                 print("  Clicking 'Ja' (Yes) to stay signed in...")
                 stay_signed_in_button_yes.click()
@@ -88,7 +67,6 @@ def handle_microsoft_login(page: Page, email: str, password: str) -> None:
         except Exception:
             print("  'Stay signed in?' prompt handling timed out or failed, proceeding...")
 
-        # Try up to 3 times to find and click the "Stay signed in?" buttons
         max_attempts = 3
         for attempt in range(max_attempts):
             try:
@@ -131,7 +109,7 @@ def handle_microsoft_login(page: Page, email: str, password: str) -> None:
         print(f"Error during Microsoft login interaction: {e}")
         print(f"  Current URL: {page.url}")
         print(f"  Page content (partial): {page.content()[:1000]}")
-        raise # Re-raise to stop execution if login failed
+        raise
 
     print("  Microsoft login steps completed.")
 
