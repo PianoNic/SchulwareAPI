@@ -41,7 +41,6 @@ def get_env_variable(var_name: str) -> str:
 try:
     SCHULNETZ_API_BASE_URL = get_env_variable("SCHULNETZ_API_BASE_URL")
     SCHULNETZ_WEB_BASE_URL = get_env_variable("SCHULNETZ_WEB_BASE_URL")
-    SCHULNETZ_API_KEY = get_env_variable("SCHULNETZ_API_KEY")
     SCHULNETZ_CLIENT_ID = get_env_variable("SCHULNETZ_CLIENT_ID")
     REDIRECT_URI = get_env_variable("REDIRECT_URI")
 except EnvironmentError as e:
@@ -154,7 +153,6 @@ for endpoint_config in endpoints:
             if target_url_path.startswith("/rest/v1/"):
                 target_base_url = SCHULNETZ_API_BASE_URL
                 # Use the token from authorization header, fallback to API key if no valid token
-                auth_token = token if token else SCHULNETZ_API_KEY
                 request_headers = {
                     "Referer": "https://schulnetz.web.app/",
                     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -165,7 +163,7 @@ for endpoint_config in endpoints:
                     "sec-ch-ua": '"Opera";v="120", "Not-A.Brand";v="8", '
                     '"Chromium";v="135"',
                     "sec-ch-ua-mobile": "?0",
-                    "Authorization": f"Bearer {auth_token}",
+                    "Authorization": f"Bearer {token}",
                 }
             elif target_url_path.startswith("/ngsw.json"):
                 target_base_url = SCHULNETZ_WEB_BASE_URL
