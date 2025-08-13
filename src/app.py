@@ -8,32 +8,42 @@ from fastapi.responses import JSONResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import Dict, Any, List, Optional
 from dotenv import load_dotenv
+import logging
+import colorlog
+from .auth import authenticate_with_credentials
+from .auth import two_fa_queue
 
-# Load environment variables from .env file
+handler = colorlog.StreamHandler()
+handler.setFormatter(colorlog.ColoredFormatter(
+    '%(log_color)s%(levelname)s%(reset)s: %(message)s',
+    log_colors={
+        'DEBUG': 'blue',
+        'INFO': 'green',
+        'WARNING': 'yellow',
+        'ERROR': 'red',
+        'CRITICAL': 'bold_red',
+    }
+))
+
+logger = colorlog.getLogger("schulware")
+logger.addHandler(handler)
+logger.setLevel(logging.INFO)
+logger.propagate = False  # Prevent duplicate logs
+
 load_dotenv()
 
-# 1. Environment Variable Retrieval
-# This function helps ensure that required environment variables are present.
 def get_env_variable(var_name: str) -> str:
-    """Retrieves an environment variable or raises an error if not found."""
     value = os.environ.get(var_name)
     if value is None:
-        raise EnvironmentError(
-            f"Required environment variable '{var_name}' is not set."
-        )
+        raise EnvironmentError(f"Required environment variable '{var_name}' is not set.")
     return value
 
-
-# Load environment variables early to fail fast if missing
 try:
     SCHULNETZ_API_BASE_URL = get_env_variable("SCHULNETZ_API_BASE_URL")
     SCHULNETZ_WEB_BASE_URL = get_env_variable("SCHULNETZ_WEB_BASE_URL")
-    SCHULNETZ_API_KEY = get_env_variable("SCHULNETZ_API_KEY")
     SCHULNETZ_CLIENT_ID = get_env_variable("SCHULNETZ_CLIENT_ID")
-    REDIRECT_URI = get_env_variable("REDIRECT_URI")
 except EnvironmentError as e:
     print(f"Configuration Error: {e}")
-    # Exit or handle the error gracefully, e.g., by not starting the app
     exit(1)
 
 
@@ -67,31 +77,19 @@ app = FastAPI(
 )
 
 # Health check endpoint for Docker monitoring
-@app.get("/health", tags=["System"])
+@app.get("/health", tags=["Application"])
 async def health_check():
-    """Health check endpoint for monitoring the service status."""
     return {"status": "healthy", "service": "SchulwareAPI"}
 
 @app.post("/authenticate", tags=["Authorization"])
 async def authenticate_and_get_token(email: str = Form(...), password: str = Form(...)):
-    """Login with email and password to get access token. Use this token in the 'Authorize' button."""
-    
     if not email or not password:
         raise HTTPException(status_code=400, detail="Email and password are required")
     
     try:
-        # Import auth functions
-        from .auth import authenticate_with_credentials
-        
-        # Run authentication in a separate thread to avoid blocking the asyncio loop
         loop = asyncio.get_event_loop()
         with concurrent.futures.ThreadPoolExecutor() as executor:
-            result = await loop.run_in_executor(
-                executor, 
-                authenticate_with_credentials, 
-                email, 
-                password
-            )
+            result = await authenticate_with_credentials(email, password)
         
         if result.get("success") and result.get("access_token"):
             access_token = result["access_token"]
@@ -107,11 +105,20 @@ async def authenticate_and_get_token(email: str = Form(...), password: str = For
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Authentication error: {str(e)}")
 
+@app.post("/2FA", tags=["Authorization"])
+async def pass_2fa_token(two_fa: int = Form(...)):
+    try:
+        await two_fa_queue.put(two_fa)
+        logger.info(f"2FA token {two_fa} received and put in queue.")
+        return {"message": "2FA token received. Processing authentication."}
+    except Exception as e:
+        logger.error(f"Error processing 2FA token: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error processing 2FA token: {str(e)}")
+
 # Optional: Function to validate bearer token (for dependency injection)
 async def get_current_token(credentials: HTTPAuthorizationCredentials = Security(security)) -> str:
     """Extract and return the bearer token from request headers."""
     return credentials.credentials
-
 
 # HTTPX client for making async requests
 @app.on_event("startup")
@@ -145,7 +152,6 @@ for endpoint_config in endpoints:
             if target_url_path.startswith("/rest/v1/"):
                 target_base_url = SCHULNETZ_API_BASE_URL
                 # Use the token from authorization header, fallback to API key if no valid token
-                auth_token = token if token else SCHULNETZ_API_KEY
                 request_headers = {
                     "Referer": "https://schulnetz.web.app/",
                     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -156,7 +162,7 @@ for endpoint_config in endpoints:
                     "sec-ch-ua": '"Opera";v="120", "Not-A.Brand";v="8", '
                     '"Chromium";v="135"',
                     "sec-ch-ua-mobile": "?0",
-                    "Authorization": f"Bearer {auth_token}",
+                    "Authorization": f"Bearer {token}",
                 }
             elif target_url_path.startswith("/ngsw.json"):
                 target_base_url = SCHULNETZ_WEB_BASE_URL
@@ -264,3 +270,22 @@ for endpoint_config in endpoints:
         tags=["Schulnetz API"],
         summary=f"Proxy for {name}",
     )
+
+# # Configure FastAPI/Uvicorn-style colored logging
+# handler = colorlog.StreamHandler()
+# handler.setFormatter(colorlog.ColoredFormatter(
+#     '%(log_color)s[%(levelname)s]%(reset)s %(asctime)s %(name)s: %(message)s',
+#     datefmt="%Y-%m-%d %H:%M:%S",
+#     log_colors={
+#         'DEBUG': 'blue',
+#         'INFO': 'green',
+#         'WARNING': 'yellow',
+#         'ERROR': 'red',
+#         'CRITICAL': 'bold_red',
+#     }
+# ))
+
+# logger = colorlog.getLogger("schulware")
+# logger.addHandler(handler)
+# logger.setLevel(logging.INFO)
+# logger.propagate = False  # Prevent duplicate logs

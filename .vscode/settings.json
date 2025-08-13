@@ -1,0 +1,15 @@
+{
+    "customCommands.commands": [
+        {
+            "name": "🗑️ Delete all __pycache__ files",
+            "command": "Get-ChildItem -Path . -Recurse -Directory -Filter '__pycache__' | Remove-Item -Recurse -Force",
+            "runOnStartup": true,
+            "runOnShutdown": true
+        }
+    ],
+    "files.exclude": {
+        "**/__pycache__": true,
+        "**/*.pyc": true
+    },
+    "python.analysis.typeCheckingMode": "off"
+}

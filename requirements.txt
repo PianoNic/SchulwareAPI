@@ -4,3 +4,4 @@ httpx
 python-dotenv
 playwright
 python-multipart
+colorlog
