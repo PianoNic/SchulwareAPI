@@ -42,7 +42,6 @@ try:
     SCHULNETZ_API_BASE_URL = get_env_variable("SCHULNETZ_API_BASE_URL")
     SCHULNETZ_WEB_BASE_URL = get_env_variable("SCHULNETZ_WEB_BASE_URL")
     SCHULNETZ_CLIENT_ID = get_env_variable("SCHULNETZ_CLIENT_ID")
-    REDIRECT_URI = get_env_variable("REDIRECT_URI")
 except EnvironmentError as e:
     print(f"Configuration Error: {e}")
     exit(1)

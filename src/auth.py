@@ -18,9 +18,8 @@ two_fa_queue = asyncio.Queue()
 load_dotenv()
 
 SCHULNETZ_CLIENT_ID = os.getenv("SCHULNETZ_CLIENT_ID")
-REDIRECT_URI = os.getenv("REDIRECT_URI")
 
-if not all([SCHULNETZ_CLIENT_ID, REDIRECT_URI]):
+if not all([SCHULNETZ_CLIENT_ID]):
     raise EnvironmentError("Missing required environment variables.")
 
 logger = colorlog.getLogger("schulware")
@@ -58,7 +57,6 @@ async def handle_microsoft_login(page: Page, email: str, password: str) -> None:
         number_text = await auth_number.text_content()
         logger.info(f"Authentication number found: {number_text}")
         
-        # Wait until the dialog has closed itself
         logger.info("Waiting for authentication dialog to close...")
         await auth_number.wait_for(state="hidden", timeout=60000)
         logger.info("Authentication dialog has closed")
@@ -68,8 +66,7 @@ async def handle_microsoft_login(page: Page, email: str, password: str) -> None:
         logger.info("Handling security information update...")
         container = page.locator('[data-automation-id="SecurityInfoRegister"]')
         await container.wait_for(state="visible", timeout=5000)
-        # Add logic here to handle the security info update form
-        # This might involve clicking skip or filling out info depending on requirements
+        # DOTO: handle the security info update form
 
     async def handle_stay_signed_in():
         """Handle stay signed in prompt"""
@@ -194,7 +191,8 @@ async def main(email: Optional[str] = None, password: Optional[str] = None):
     # --- Step 1: Generate PKCE, State, Nonce ---
     code_verifier, code_challenge = generate_pkce_challenge()
     state = generate_random_string(32)  # For CSRF protection
-    nonce = generate_random_string(32)  # For replay protection in OpenID Connect    logger.info("Generated PKCE and state/nonce:")
+    nonce = generate_random_string(32)  # For replay protection in OpenID Connect    
+    logger.info("Generated PKCE and state/nonce:")
     logger.info(f"  Code Verifier: {code_verifier}")
     logger.info(f"  Code Challenge: {code_challenge}")
     logger.info(f"  State: {state}")
@@ -205,12 +203,8 @@ async def main(email: Optional[str] = None, password: Optional[str] = None):
     auth_code = None
     received_state = None
 
-    # We'll wait for redirect to schulnetz.web.app/callback instead of parsing REDIRECT_URI
-    # since that's where the final code ends up according to the curl commands
-
-    async with async_playwright() as p:# Launch a browser instance in headless mode for background execution
-        # Set headless=False for debugging to see what the browser is doing
-        browser = await p.chromium.launch(headless=False)
+    async with async_playwright() as playwright:
+        browser = await playwright.chromium.launch(headless=True)
         page = await browser.new_page()
 
         logger.info("\n--- Using Playwright for full login flow ---")
@@ -247,14 +241,10 @@ async def main(email: Optional[str] = None, password: Optional[str] = None):
             # Add some debug output to see what's happening
             logger.info(f"After Microsoft login, current URL: {page.url}")
             
-            # Wait a moment for any additional redirects
-            await asyncio.sleep(3)
-            logger.info(f"After waiting 3 seconds, current URL: {page.url}")
-            
             # Check if we're already at a page that might have the auth code
             current_url = page.url
             if 'code=' in current_url:
-                logger.info("Found authorization code in current URL immediately after login")
+                logger.info("Found authorization code in current URL")
                 parsed_url = urlparse(current_url)
                 query_params = parse_qs(parsed_url.query)
                 auth_code = query_params.get("code", [None])[0]
@@ -263,8 +253,7 @@ async def main(email: Optional[str] = None, password: Optional[str] = None):
                     logger.info(f"Successfully obtained Authorization Code directly: {auth_code[:30]}...")
                     logger.info(f"Received State: {received_state}")
                 else:
-                    auth_code = None            # Since we already have the auth code, we can proceed directly to token exchange
-            # But let's also handle the case where the browser might do additional redirects
+                    auth_code = None
             if not auth_code:
                 logger.info("Waiting for any additional redirects or auth code...")
                 
