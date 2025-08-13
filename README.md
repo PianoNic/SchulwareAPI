@@ -46,23 +46,6 @@ curl "http://localhost:8000/me/events?min_date=2025-08-05&max_date=2025-08-06" -
 
 Refer to `/docs` for all proxied endpoints.
 
-## ⚙️ Configuration (`endpoints.json`)
-Defines the wrapper's routes. Minimal fields:
-```json
-{
-  "name": "translations",
-  "path": "/config/translations",
-  "method": "GET",
-  "url_path": "/rest/v1/config/translations",
-  "query_params": ["filter"]
-}
-```
-- **`name`**: Internal identifier.
-- **`path`**: Wrapper's URL path.
-- **`method`**: HTTP method.
-- **`url_path`**: Upstream API's full path (determines base URL).
-- **`query_params`**: List of query parameters to forward.
-
 ## 📜 License
 This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
 
