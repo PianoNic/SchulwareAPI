@@ -1,6 +1,7 @@
 import asyncio
 import time
 import colorlog
+from fastapi import logger
 import httpx
 import hashlib
 import base64
@@ -22,7 +23,29 @@ SCHULNETZ_CLIENT_ID = os.getenv("SCHULNETZ_CLIENT_ID")
 if not all([SCHULNETZ_CLIENT_ID]):
     raise EnvironmentError("Missing required environment variables.")
 
-logger = colorlog.getLogger("schulware")
+log = logger.logger
+
+# --- Robust logger configuration for colorlog and console output ---
+import logging
+
+# Set up colorlog handler if not already present
+if not getattr(log, '_colorlog_configured', False):
+    handler = colorlog.StreamHandler()
+    handler.setFormatter(colorlog.ColoredFormatter(
+        '%(log_color)s%(levelname)-8s%(reset)s %(white)s%(message)s',
+        log_colors={
+            'DEBUG':    'cyan',
+            'INFO':     'green',
+            'WARNING':  'yellow',
+            'ERROR':    'red',
+            'CRITICAL': 'bold_red',
+        }
+    ))
+    log.handlers = []  # Remove any existing handlers
+    log.addHandler(handler)
+    log.setLevel(logging.INFO)  # Set to INFO or DEBUG as needed
+    log._colorlog_configured = True
+# --- End logger configuration ---
 
 def generate_random_string(length):
     return "".join(
@@ -38,10 +61,10 @@ def generate_pkce_challenge():
 async def handle_microsoft_login(page: Page, email: str, password: str) -> None:
     async def handle_2fa():
         """Handle 2FA input when required"""
-        logger.info("Handling 2FA authentication...")
-        logger.info("Please provide 2FA token via /2FA endpoint...")
+        log.info("Handling 2FA authentication...")
+        log.info("Please provide 2FA token via /2FA endpoint...")
         two_fa_token = await asyncio.wait_for(two_fa_queue.get(), timeout=120)
-        logger.info("Received 2FA token")
+        log.info("Received 2FA token")
         
         two_fa_field = 'input[type="tel"], input[name="otc"]'
         await expect(page.locator(two_fa_field)).to_be_visible(timeout=20000)
@@ -52,32 +75,32 @@ async def handle_microsoft_login(page: Page, email: str, password: str) -> None:
 
     async def handle_authenticator_code():
         """Handle authenticator app code display"""
-        logger.info("Handling authenticator code display...")
+        log.info("Handling authenticator code display...")
         auth_number = page.locator("#idRichContext_DisplaySign")
         number_text = await auth_number.text_content()
-        logger.info(f"Authentication number found: {number_text}")
+        log.info(f"Authentication number found: {number_text}")
         
-        logger.info("Waiting for authentication dialog to close...")
+        log.info("Waiting for authentication dialog to close...")
         await auth_number.wait_for(state="hidden", timeout=60000)
-        logger.info("Authentication dialog has closed")
+        log.info("Authentication dialog has closed")
 
     async def handle_security_info_update():
         """Handle security information update dialog"""
-        logger.info("Handling security information update...")
+        log.info("Handling security information update...")
         container = page.locator('[data-automation-id="SecurityInfoRegister"]')
         await container.wait_for(state="visible", timeout=5000)
         # DOTO: handle the security info update form
 
     async def handle_stay_signed_in():
         """Handle stay signed in prompt"""
-        logger.info("Handling 'Stay signed in?' prompt...")
+        log.info("Handling 'Stay signed in?' prompt...")
         yes_button = page.locator('#idSIButton9')
         await yes_button.wait_for(state="visible", timeout=3000)
         await yes_button.click()
 
     async def determine_and_handle_next_step():
         """Check what's present on the page and handle accordingly"""
-        logger.info("Determining next required step...")
+        log.info("Determining next required step...")
         
         # Define all possible elements we might encounter
         selectors = {
@@ -93,7 +116,7 @@ async def handle_microsoft_login(page: Page, email: str, password: str) -> None:
             try:
                 element = page.locator(selector)
                 await element.wait_for(state="visible", timeout=1000)
-                logger.info(f"Found: {step_name}")
+                log.info(f"Found: {step_name}")
                 
                 # Handle each step
                 if step_name == 'account_protection':
@@ -120,11 +143,11 @@ async def handle_microsoft_login(page: Page, email: str, password: str) -> None:
                 continue  # Element not found, try next
         
         # If none of the expected elements are found, we might be done or on an unexpected page
-        logger.info("No expected post-login elements found - login may be complete")
+        log.info("No expected post-login elements found - login may be complete")
 
     try:
         # Step 1: Enter email
-        logger.info("Entering Microsoft email...")
+        log.info("Entering Microsoft email...")
         email_input_selector = 'input[type="email"], input[name="loginfmt"]'
         await expect(page.locator(email_input_selector)).to_be_visible(timeout=20000)
         await page.fill(email_input_selector, email)
@@ -133,7 +156,7 @@ async def handle_microsoft_login(page: Page, email: str, password: str) -> None:
             await email_button.click()
 
         # Step 2: Enter password
-        logger.info("Entering Microsoft password...")
+        log.info("Entering Microsoft password...")
         password_input_selector = 'input[type="password"], input[name="passwd"]'
         await expect(page.locator(password_input_selector)).to_be_visible(timeout=20000)
         await page.fill(password_input_selector, password)
@@ -145,12 +168,12 @@ async def handle_microsoft_login(page: Page, email: str, password: str) -> None:
         await determine_and_handle_next_step()
 
     except Exception as e:
-        logger.error(f"Error during Microsoft login interaction: {e}")
-        logger.info(f"Current URL: {page.url}")
-        logger.info(f"Page content (partial): {(await page.content())[:1000]}")
+        log.error(f"Error during Microsoft login interaction: {e}")
+        log.info(f"Current URL: {page.url}")
+        log.info(f"Page content (partial): {(await page.content())[:1000]}")
         raise
 
-    logger.info("Microsoft login completed successfully")
+    log.info("Microsoft login completed successfully")
 
 async def authenticate_with_credentials(email: str, password: str) -> dict:
     """
@@ -159,12 +182,13 @@ async def authenticate_with_credentials(email: str, password: str) -> dict:
     """
     try:
         # Run the main authentication flow with provided credentials
-        access_token = await main(email, password)
+        access_token, refresh_token = await main(email, password)
         if access_token:
             return {
                 "success": True, 
                 "message": "Authentication completed successfully",
-                "access_token": access_token
+                "access_token": access_token,
+                "refresh_token": refresh_token
             }
         else:
             return {
@@ -192,11 +216,11 @@ async def main(email: Optional[str] = None, password: Optional[str] = None):
     code_verifier, code_challenge = generate_pkce_challenge()
     state = generate_random_string(32)  # For CSRF protection
     nonce = generate_random_string(32)  # For replay protection in OpenID Connect    
-    logger.info("Generated PKCE and state/nonce:")
-    logger.info(f"  Code Verifier: {code_verifier}")
-    logger.info(f"  Code Challenge: {code_challenge}")
-    logger.info(f"  State: {state}")
-    logger.info(f"  Nonce: {nonce}\n")
+    log.info("Generated PKCE and state/nonce:")
+    log.info(f"  Code Verifier: {code_verifier}")
+    log.info(f"  Code Challenge: {code_challenge}")
+    log.info(f"  State: {state}")
+    log.info(f"  Nonce: {nonce}\n")
     
     # --- Step 2: Use Playwright to navigate to schulnetz.bbbaden.ch,
     #             let it redirect to Microsoft, then handle Microsoft login. ---
@@ -207,7 +231,7 @@ async def main(email: Optional[str] = None, password: Optional[str] = None):
         browser = await playwright.chromium.launch(headless=True)
         page = await browser.new_page()
 
-        logger.info("\n--- Using Playwright for full login flow ---")
+        log.info("\n--- Using Playwright for full login flow ---")
         try:
             # Build the initial authorization URL with proper parameters
             auth_params = {
@@ -222,45 +246,45 @@ async def main(email: Optional[str] = None, password: Optional[str] = None):
             }
             
             auth_url = "https://schulnetz.bbbaden.ch/authorize.php?" + urlencode(auth_params)
-            logger.info(f"Navigating to {auth_url}...")
+            log.info(f"Navigating to {auth_url}...")
 
             # Navigate to the authorization URL which will redirect to Microsoft
             await page.goto(auth_url, wait_until='load', timeout=60000)
 
             # Confirm we have landed on the Microsoft login page after the redirect
-            logger.info(f"Playwright landed on: {page.url}")
+            log.info(f"Playwright landed on: {page.url}")
             if "login.microsoftonline.com" not in page.url:
-                logger.error("ERROR: Did not redirect to Microsoft login page as expected.")
-                logger.info(f"Final URL: {page.url}")
-                logger.info(f"Page content (partial): {await page.content()[:1000]}")
+                log.error("ERROR: Did not redirect to Microsoft login page as expected.")
+                log.info(f"Final URL: {page.url}")
+                log.info(f"Page content (partial): {await page.content()[:1000]}")
                 await browser.close()
                 return            # Now, handle the interactive Microsoft login on the current page
-            logger.info("  Starting interactive Microsoft login...")
+            log.info("  Starting interactive Microsoft login...")
             await handle_microsoft_login(page, email, password)
 
             # Add some debug output to see what's happening
-            logger.info(f"After Microsoft login, current URL: {page.url}")
+            log.info(f"After Microsoft login, current URL: {page.url}")
             
             # Check if we're already at a page that might have the auth code
             current_url = page.url
             if 'code=' in current_url:
-                logger.info("Found authorization code in current URL")
+                log.info("Found authorization code in current URL")
                 parsed_url = urlparse(current_url)
                 query_params = parse_qs(parsed_url.query)
                 auth_code = query_params.get("code", [None])[0]
                 received_state = query_params.get("state", [None])[0]
                 if auth_code:
-                    logger.info(f"Successfully obtained Authorization Code directly: {auth_code[:30]}...")
-                    logger.info(f"Received State: {received_state}")
+                    log.info(f"Successfully obtained Authorization Code directly: {auth_code[:30]}...")
+                    log.info(f"Received State: {received_state}")
                 else:
                     auth_code = None
             if not auth_code:
-                logger.info("Waiting for any additional redirects or auth code...")
+                log.info("Waiting for any additional redirects or auth code...")
                 
                 # Wait a bit longer to see if there are any additional redirects
                 await asyncio.sleep(5)
                 current_url = page.url
-                logger.info(f"After additional wait, current URL: {current_url}")
+                log.info(f"After additional wait, current URL: {current_url}")
                 
                 # Try to extract code from current URL again
                 if 'code=' in current_url:
@@ -270,18 +294,18 @@ async def main(email: Optional[str] = None, password: Optional[str] = None):
                     received_state = query_params.get("state", [None])[0]
                     
                     if auth_code:
-                        logger.info(f"Successfully obtained Authorization Code from delayed URL: {auth_code[:30]}...")
-                        logger.info(f"Received State: {received_state}")
+                        log.info(f"Successfully obtained Authorization Code from delayed URL: {auth_code[:30]}...")
+                        log.info(f"Received State: {received_state}")
                 
                 if not auth_code:
-                    logger.warning("Still no authorization code found after additional wait.")
-                    logger.info(f"Final URL: {page.url}")
-                    logger.info("Will attempt to proceed anyway...")
+                    log.warning("Still no authorization code found after additional wait.")
+                    log.info(f"Final URL: {page.url}")
+                    log.info("Will attempt to proceed anyway...")
             
-                logger.info("Auth code extraction completed.")      
+                log.info("Auth code extraction completed.")      
 
         except Exception as e:
-            logger.error(f"Error during Playwright automation: {e}")
+            log.error(f"Error during Playwright automation: {e}")
             # Uncomment the line below to save a screenshot for debugging on error
             # await page.screenshot(path="playwright_error_screenshot.png")
             # logger.info(f"Screenshot saved to playwright_error_screenshot.png")
@@ -289,20 +313,20 @@ async def main(email: Optional[str] = None, password: Optional[str] = None):
             await browser.close()
 
         if not auth_code:
-            logger.error("Authorization code was not obtained. Cannot proceed to token exchange.")
+            log.error("Authorization code was not obtained. Cannot proceed to token exchange.")
             await httpx_client.aclose()
             return None
 
     # Validate state parameter
     if received_state and received_state != state:
-        logger.warning(f"WARNING: State mismatch!")
-        logger.info(f"  Expected: {state}")
-        logger.info(f"  Received: {received_state}")
-        logger.info(f"  This could indicate a security issue, but we'll continue...")
+        log.warning(f"WARNING: State mismatch!")
+        log.info(f"  Expected: {state}")
+        log.info(f"  Received: {received_state}")
+        log.info(f"  This could indicate a security issue, but we'll continue...")
     elif received_state == state:
-        logger.info("State validation passed.")
+        log.info("State validation passed.")
     else:
-        logger.info("Note: State validation skipped - no state received or comparison not possible.")
+        log.info("Note: State validation skipped - no state received or comparison not possible.")
 
     # --- Step 3: Exchange Authorization Code for Access Token (using httpx) ---
     # This step uses the 'code' obtained by Playwright.
@@ -326,7 +350,7 @@ async def main(email: Optional[str] = None, password: Optional[str] = None):
         "sec-ch-ua-platform": '"Windows"',
     }
 
-    logger.info(f"\nExchanging authorization code for token at {token_url}...")
+    log.info(f"\nExchanging authorization code for token at {token_url}...")
     try:
         # httpx client automatically handles cookies if it acquired any relevant ones.
         token_response = await httpx_client.post(
@@ -335,24 +359,25 @@ async def main(email: Optional[str] = None, password: Optional[str] = None):
         token_response.raise_for_status()
         token_json = token_response.json()
 
-        logger.info("\nToken Exchange Successful!")
-        logger.info("Received Token Data:")
-        logger.info(token_json)
+        log.info("\nToken Exchange Successful!")
+        log.info("Received Token Data:")
+        log.info(token_json)
 
         access_token = token_json.get("access_token")
+        refresh_token = token_json.get("refresh_token")
         if access_token:
-            logger.info(f"\nAccess Token: {access_token}")
-            return access_token
+            log.info(f"\nAccess Token: {access_token}")
+            return access_token, refresh_token
         else:
-            logger.error("Access token not found in response.")
+            log.error("Access token not found in response.")
             return None
 
     except httpx.RequestError as e:
-        logger.error(f"An HTTP error occurred during token exchange: {e}")
+        log.error(f"An HTTP error occurred during token exchange: {e}")
         return None
     except httpx.HTTPStatusError as e:
-        logger.error(f"HTTP Status Error during token exchange: {e.response.status_code} - {e.response.text}")
-        logger.info(f"Response content: {e.response.text}")
+        log.error(f"HTTP Status Error during token exchange: {e.response.status_code} - {e.response.text}")
+        log.info(f"Response content: {e.response.text}")
         return None
     finally:
         await httpx_client.aclose()
