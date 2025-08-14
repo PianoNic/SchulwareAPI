@@ -20,6 +20,9 @@
 - **Auto Docs**: FastAPI provides interactive Swagger UI/ReDoc.
 - **Docker Ready**: Easy containerized deployment.
 
+## 🛠️ Compatibility
+This API has been tested on bbbaden and kanti baden Schulnetz systems.
+
 ## 🚀 Installation
 
 ### Prerequisites
