@@ -268,10 +268,10 @@ async def main(email: Optional[str] = None, password: Optional[str] = None):
             # Check if we're already at a page that might have the auth code
             current_url = page.url
             if 'code=' in current_url:
-                log.info("Found authorization code in current URL")
                 parsed_url = urlparse(current_url)
                 query_params = parse_qs(parsed_url.query)
                 auth_code = query_params.get("code", [None])[0]
+                log.info(f"Found authorization code in current URL: {auth_code}")
                 received_state = query_params.get("state", [None])[0]
                 if auth_code:
                     log.info(f"Successfully obtained Authorization Code directly: {auth_code[:30]}...")
