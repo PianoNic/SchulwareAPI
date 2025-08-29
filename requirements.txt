@@ -6,3 +6,4 @@ playwright
 python-multipart
 colorlog
 beautifulsoup4
+peewee

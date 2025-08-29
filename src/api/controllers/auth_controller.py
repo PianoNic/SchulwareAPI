@@ -7,6 +7,7 @@ from src.api.auth.auth import (
     two_fa_queue
 )
 from src.application.services.token_service import token_service, ApplicationType
+from src.application.services.database_service import db_service
 
 log = logger.logger
 router = APIRouter()
@@ -236,36 +237,38 @@ async def pass_2fa_token(two_fa: int = Form(...)):
 
 
 @router.get("/api/session/validate", tags=router_tag)
-async def validate_session(email: str = Query(...)):
+async def validate_session(email: str = Query(...), auth_type: str = Query("web")):
     """
     Validate existing session without full authentication.
     """
     try:
-        existing_session = token_service.get_session_data(email)
-        if not existing_session:
+        # Use the new Peewee-based db_service to get the latest valid session
+        session = db_service.get_active_session_by_email_and_type(email, auth_type)
+        if not session:
             return {
                 "valid": False,
                 "message": "No existing session found",
                 "requires_auth": True
             }
-        
-        session_cookies = existing_session.get("session_cookies")
-        if session_cookies:
-            result = await authenticate_with_existing_session(session_cookies, "web")
-            
-            return {
-                "valid": result["success"],
-                "message": result.get("message", "Session validation completed"),
-                "requires_auth": not result["success"],
-                "session_data": result if result["success"] else None
+        # Prepare response with available session data
+        response = {
+            "valid": True,
+            "message": "Session is valid",
+            "requires_auth": False,
+            "session_data": {
+                "session_id": session.session_id,
+                "auth_type": session.auth_type,
+                "access_token": session.access_token,
+                "refresh_token": session.refresh_token,
+                "session_cookies": session.cookies_dict,
+                "navigation_urls": session.navigation_dict,
+                "noten_url": session.noten_url,
+                "authenticated_at": session.authenticated_at.isoformat() if session.authenticated_at else None,
+                "expires_at": session.expires_at.isoformat() if session.expires_at else None,
+                "is_active": session.is_active
             }
-        else:
-            return {
-                "valid": False,
-                "message": "No session cookies available",
-                "requires_auth": True
-            }
-            
+        }
+        return response
     except Exception as e:
         log.error(f"Session validation error: {e}")
         return {
