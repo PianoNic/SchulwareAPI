@@ -16,6 +16,9 @@ from dotenv import load_dotenv
 
 from playwright.async_api import async_playwright, Page, expect
 
+# Import database service
+from ...application.services.database_service import db_service
+
 two_fa_queue = asyncio.Queue()
 
 load_dotenv()
@@ -467,16 +470,34 @@ async def authenticate_with_web_session(email: str, password: str) -> Dict[str, 
                 "error": "Failed to obtain web session cookies or auth code"
             }
 
+        # Save session to database
+        session_id = db_service.create_session(
+            email=email,
+            auth_type="web",
+            auth_code=auth_code,
+            session_cookies=session_cookies,
+            expires_in_hours=24
+        )
+        
+        log.info(f"Saved web session to database: {session_id}")
+
         return {
             "success": True, 
             "message": "Web authentication completed successfully",
             "session_cookies": session_cookies,
             "auth_code": auth_code,
-            "session_type": "web"
+            "session_type": "web",
+            "session_id": session_id
         }
 
     except Exception as e:
         log.error(f"Web authentication error: {e}")
+        db_service.log_event(
+            event_type="login",
+            auth_type="web",
+            message=f"Web authentication failed for {email}: {str(e)}",
+            success=False
+        )
         return {"success": False, "error": str(e)}
 
 
@@ -567,12 +588,26 @@ async def authenticate_with_credentials(email: str, password: str, auth_type: st
             access_token, refresh_token = await exchange_code_for_tokens(auth_code, code_verifier)
 
             if access_token:
+                # Save mobile session to database
+                session_id = db_service.create_session(
+                    email=email,
+                    auth_type="mobile",
+                    access_token=access_token,
+                    refresh_token=refresh_token,
+                    auth_code=auth_code,
+                    expires_in_hours=1  # Mobile tokens typically expire in 1 hour
+                )
+                
+                log.info(f"Saved mobile session to database: {session_id}")
+
                 return {
                     "success": True, 
                     "message": "Authentication completed successfully",
                     "access_token": access_token,
                     "refresh_token": refresh_token,
-                    "session_type": "mobile"
+                    "auth_code": auth_code,
+                    "session_type": "mobile",
+                    "session_id": session_id
                 }
             else:
                 return {
@@ -582,6 +617,12 @@ async def authenticate_with_credentials(email: str, password: str, auth_type: st
 
         except Exception as e:
             log.error(f"Authentication error: {e}")
+            db_service.log_event(
+                event_type="login",
+                auth_type="mobile",
+                message=f"Mobile authentication failed for {email}: {str(e)}",
+                success=False
+            )
             return {"success": False, "error": str(e)}
     else:
         return {"success": False, "error": f"Unknown auth_type: {auth_type}. Use 'mobile' or 'web'."}
@@ -602,6 +643,12 @@ async def main(email: Optional[str] = None, password: Optional[str] = None, auth
     """
     if not email or not password:
         log.error("Email and password are required")
+        db_service.log_event(
+            event_type="login",
+            auth_type=auth_type,
+            message="Authentication failed: Email and password are required",
+            success=False
+        )
         return None, None
 
     result = await authenticate_with_credentials(email, password, auth_type)
@@ -613,6 +660,12 @@ async def main(email: Optional[str] = None, password: Optional[str] = None, auth
             return result["session_cookies"], result["auth_code"]
     else:
         log.error(f"Authentication failed: {result['error']}")
+        db_service.log_event(
+            event_type="login",
+            auth_type=auth_type,
+            message=f"Authentication failed for {email}: {result['error']}",
+            success=False
+        )
         return None, None
 
 
@@ -829,22 +882,66 @@ async def authenticate_unified(email: str, password: str) -> Dict[str, Any]:
             "error": f"Token exchange failed: {str(e)}"
         }
 
-    # Step 9: Return unified authentication result
-    return {
-        "success": True,
-        "message": "Unified authentication completed successfully",
-        # Mobile OAuth2 data
-        "access_token": access_token,
-        "refresh_token": refresh_token,
-        # Web session data
-        "session_cookies": session_cookies,
-        "auth_code": auth_code,
-        "navigation_urls": navigation_urls,
-        "noten_url": noten_url,
-        # Metadata
-        "session_types": ["mobile", "web"],
-        "authenticated_at": str(datetime.now())
-    }
+    # Save unified session to database
+    try:
+        session_id = db_service.create_session(
+            email=email,
+            auth_type="unified",
+            access_token=access_token,
+            refresh_token=refresh_token,
+            auth_code=auth_code,
+            session_cookies=session_cookies,
+            expires_in_hours=1  # Mobile tokens expire in 1 hour, web session in 24
+        )
+        
+        # Save navigation routes to database
+        if navigation_urls:
+            for route_name, route_url in navigation_urls.items():
+                db_service.save_navigation_route(
+                    session_id=session_id,
+                    route_name=route_name,
+                    route_url=route_url,
+                    route_type="navigation_menu"
+                )
+        
+        log.info(f"Saved unified session to database: {session_id}")
+        log.info(f"Saved {len(navigation_urls)} navigation routes")
+        
+        return {
+            "success": True,
+            "message": "Unified authentication completed successfully",
+            # Mobile OAuth2 data
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            # Web session data
+            "session_cookies": session_cookies,
+            "auth_code": auth_code,
+            "navigation_urls": navigation_urls,
+            "noten_url": noten_url,
+            # Metadata
+            "session_types": ["mobile", "web"],
+            "authenticated_at": str(datetime.now()),
+            "session_id": session_id
+        }
+        
+    except Exception as db_error:
+        log.error(f"Failed to save unified session to database: {db_error}")
+        # Still return success but without database persistence
+        return {
+            "success": True,
+            "message": "Unified authentication completed successfully (database save failed)",
+            # Mobile OAuth2 data
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            # Web session data
+            "session_cookies": session_cookies,
+            "auth_code": auth_code,
+            "navigation_urls": navigation_urls,
+            "noten_url": noten_url,
+            # Metadata
+            "session_types": ["mobile", "web"],
+            "authenticated_at": str(datetime.now())
+        }
 
 async def authenticate_unified_webapp_flow(email: str, password: str) -> Dict[str, Any]:
     """
@@ -1020,23 +1117,68 @@ async def authenticate_unified_webapp_flow(email: str, password: str) -> Dict[st
             "error": f"Token exchange failed: {str(e)}"
         }
 
-    # Step 7: Return unified authentication result
-    return {
-        "success": True,
-        "message": "Unified authentication completed successfully",
-        # Mobile OAuth2 data
-        "access_token": access_token,
-        "refresh_token": refresh_token,
-        # Web session data
-        "session_cookies": session_cookies,
-        "auth_code": auth_code,
-        "navigation_urls": navigation_urls,
-        "noten_url": noten_url,
-        # Metadata
-        "session_types": ["mobile", "web"],
-        "authenticated_at": str(datetime.now()),
-        "redirect_domain": redirect_domain or "unknown"
-    }
+    # Save unified session to database
+    try:
+        session_id = db_service.create_session(
+            email=email,
+            auth_type="unified_webapp",
+            access_token=access_token,
+            refresh_token=refresh_token,
+            auth_code=auth_code,
+            session_cookies=session_cookies,
+            expires_in_hours=1
+        )
+        
+        # Save navigation routes to database
+        if navigation_urls:
+            for route_name, route_url in navigation_urls.items():
+                db_service.save_navigation_route(
+                    session_id=session_id,
+                    route_name=route_name,
+                    route_url=route_url,
+                    route_type="navigation_menu"
+                )
+        
+        log.info(f"Saved unified webapp session to database: {session_id}")
+        log.info(f"Saved {len(navigation_urls)} navigation routes")
+        
+        return {
+            "success": True,
+            "message": "Unified authentication completed successfully",
+            # Mobile OAuth2 data
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            # Web session data
+            "session_cookies": session_cookies,
+            "auth_code": auth_code,
+            "navigation_urls": navigation_urls,
+            "noten_url": noten_url,
+            # Metadata
+            "session_types": ["mobile", "web"],
+            "authenticated_at": str(datetime.now()),
+            "redirect_domain": redirect_domain or "unknown",
+            "session_id": session_id
+        }
+        
+    except Exception as db_error:
+        log.error(f"Failed to save unified webapp session to database: {db_error}")
+        # Still return success but without database persistence
+        return {
+            "success": True,
+            "message": "Unified authentication completed successfully (database save failed)",
+            # Mobile OAuth2 data
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            # Web session data
+            "session_cookies": session_cookies,
+            "auth_code": auth_code,
+            "navigation_urls": navigation_urls,
+            "noten_url": noten_url,
+            # Metadata
+            "session_types": ["mobile", "web"],
+            "authenticated_at": str(datetime.now()),
+            "redirect_domain": redirect_domain or "unknown"
+        }
 
 async def authenticate_unified_with_navigation_listener(email: str, password: str) -> Dict[str, Any]:
     """
@@ -1175,7 +1317,37 @@ async def authenticate_unified_with_navigation_listener(email: str, password: st
         
         if not access_token:
             return {"success": False, "error": "Token exchange failed"}
+        # Do NOT return here! Let it continue to the DB save code below.
 
+    except Exception as e:
+        log.error(f"Token exchange error: {e}")
+        return {"success": False, "error": f"Token exchange failed: {str(e)}"}
+
+    # Save unified session to database
+    try:
+        session_id = db_service.create_session(
+            email=email,
+            auth_type="unified_nav_listener",
+            access_token=access_token,
+            refresh_token=refresh_token,
+            auth_code=auth_code,
+            session_cookies=session_cookies,
+            expires_in_hours=1
+        )
+        
+        # Save navigation routes to database
+        if navigation_urls:
+            for route_name, route_url in navigation_urls.items():
+                db_service.save_navigation_route(
+                    session_id=session_id,
+                    route_name=route_name,
+                    route_url=route_url,
+                    route_type="navigation_menu"
+                )
+        
+        log.info(f"Saved unified navigation listener session to database: {session_id}")
+        log.info(f"Saved {len(navigation_urls)} navigation routes")
+        
         return {
             "success": True,
             "message": "Unified authentication completed successfully",
@@ -1187,12 +1359,26 @@ async def authenticate_unified_with_navigation_listener(email: str, password: st
             "noten_url": noten_url,
             "session_types": ["mobile", "web"],
             "authenticated_at": str(datetime.now()),
-            "redirect_domain": redirect_domain or "unknown"
+            "redirect_domain": redirect_domain or "unknown",
+            "session_id": session_id
         }
         
-    except Exception as e:
-        log.error(f"Token exchange error: {e}")
-        return {"success": False, "error": f"Token exchange failed: {str(e)}"}
+    except Exception as db_error:
+        log.error(f"Failed to save unified navigation listener session to database: {db_error}")
+        # Still return success but without database persistence
+        return {
+            "success": True,
+            "message": "Unified authentication completed successfully (database save failed)",
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "session_cookies": session_cookies,
+            "auth_code": auth_code,
+            "navigation_urls": navigation_urls,
+            "noten_url": noten_url,
+            "session_types": ["mobile", "web"],
+            "authenticated_at": str(datetime.now()),
+            "redirect_domain": redirect_domain or "unknown"
+        }
 
 async def authenticate_with_existing_session(session_cookies: Dict[str, str], auth_type: str) -> Dict[str, Any]:
     """
@@ -1228,14 +1414,40 @@ async def authenticate_with_existing_session(session_cookies: Dict[str, str], au
                         navigation_urls = {}
                         noten_url = None
                     
+                    # Save validated session to database
+                    try:
+                        session_id = db_service.create_session(
+                            email="existing_session",  # Placeholder since we don't have email
+                            auth_type=f"{auth_type}_existing",
+                            session_cookies=session_cookies,
+                            expires_in_hours=24
+                        )
+                        
+                        # Save navigation routes if extracted
+                        if navigation_urls:
+                            for route_name, route_url in navigation_urls.items():
+                                db_service.save_navigation_route(
+                                    session_id=session_id,
+                                    route_name=route_name,
+                                    route_url=route_url,
+                                    route_type="navigation_menu"
+                                )
+                        
+                        log.info(f"Saved existing session to database: {session_id}")
+                        
+                    except Exception as db_error:
+                        log.warning(f"Failed to save existing session to database: {db_error}")
+                        session_id = None
+                    
                     return {
                         "success": True,
                         "message": "Existing web session is valid",
                         "session_cookies": session_cookies,
                         "navigation_urls": navigation_urls,
                         "noten_url": noten_url,
-                        "session_type": "web",
-                        "source": "existing_session"
+                        "session_type": auth_type,
+                        "source": "existing_session",
+                        "session_id": session_id
                     }
                 else:
                     log.info(f"Web session invalid (status: {response.status_code})")
@@ -1260,6 +1472,12 @@ async def authenticate_with_existing_session(session_cookies: Dict[str, str], au
         
     except Exception as e:
         log.error(f"Session validation error: {e}")
+        db_service.log_event(
+            event_type="session_validation",
+            auth_type=auth_type,
+            message=f"Session validation failed: {str(e)}",
+            success=False
+        )
         return {
             "success": False,
             "error": f"Session validation error: {str(e)}",
