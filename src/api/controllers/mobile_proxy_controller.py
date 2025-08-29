@@ -129,3 +129,13 @@ async def get_mobile_notifications(request: Request, token: str = Depends(get_cu
 async def get_mobile_topics(request: Request, token: str = Depends(get_current_token)):
     """Get notification topics from mobile API"""
     return await proxy_mobile_rest(request, token, "me/notifications/topics", "GET")
+
+@router.get("/api/mobile/lateness", tags=router_tag, dependencies=[Depends(security)])
+async def get_mobile_lateness(request: Request, token: str = Depends(get_current_token)):
+    """Get lateness records from mobile API"""
+    return await proxy_mobile_rest(request, token, "me/lateness", "GET")
+
+@router.get("/api/mobile/cockpitReport/{report_id}", tags=router_tag, dependencies=[Depends(security)])
+async def get_mobile_cockpit_report(report_id: int, request: Request, token: str = Depends(get_current_token)):
+    """Get a specific cockpit report from mobile API"""
+    return await proxy_mobile_rest(request, token, f"me/cockpitReport/{report_id}", "GET")
