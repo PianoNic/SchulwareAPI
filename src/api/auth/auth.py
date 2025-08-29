@@ -1,5 +1,7 @@
 import asyncio
+from datetime import datetime
 import time
+from bs4 import BeautifulSoup
 import colorlog
 from fastapi import logger
 import httpx
@@ -519,7 +521,6 @@ async def make_authenticated_web_request(url: str, session_cookies: Dict[str, st
         
         return response
 
-
 async def authenticate_with_credentials(email: str, password: str, auth_type: str = "mobile") -> Dict[str, Any]:
     """
     High-level authentication function with provided credentials.
@@ -679,6 +680,645 @@ async def example_mobile_authenticated_request(email: str, password: str):
         except Exception as e:
             log.error(f"API request failed: {e}")
             return None
+
+async def authenticate_unified(email: str, password: str) -> Dict[str, Any]:
+    """
+    Unified authentication function that gets both web session cookies AND mobile OAuth2 tokens
+    in a single Microsoft login flow.
+    
+    Args:
+        email: Microsoft account email
+        password: Microsoft account password
+        
+    Returns:
+        Dictionary with both web session cookies and mobile OAuth2 tokens
+    """
+    log.info("Starting unified authentication flow (web + mobile)...")
+
+    # Generate PKCE parameters for mobile OAuth2 flow
+    code_verifier, code_challenge = generate_pkce_challenge()
+    state = generate_random_string(32)
+    nonce = generate_random_string(32)
+    
+    log.info("Generated OAuth2 parameters for mobile flow:")
+    log.info(f"  Code Verifier: {code_verifier}")
+    log.info(f"  Code Challenge: {code_challenge}")
+    log.info(f"  State: {state}")
+    log.info(f"  Nonce: {nonce}")
+
+    async with async_playwright() as playwright:
+        browser = await playwright.chromium.launch(headless=True)
+        context = await browser.new_context()
+        page = await context.new_page()
+
+        try:
+            # Step 1: Start with OAuth2 authorization URL (for mobile tokens)
+            auth_params = generate_auth_params(state, code_challenge, nonce)
+            auth_url = "https://schulnetz.bbbaden.ch/authorize.php?" + urlencode(auth_params)
+            
+            log.info(f"Navigating to OAuth2 authorization URL: {auth_url}")
+            await page.goto(auth_url, wait_until='load', timeout=60000)
+
+            # Step 2: Handle Microsoft authentication
+            log.info(f"Current URL after redirect: {page.url}")
+            if "login.microsoftonline.com" in page.url:
+                log.info("Handling Microsoft authentication...")
+                await perform_microsoft_login(page, email, password)
+                await handle_post_login_flow(page)
+            else:
+                log.warning("Expected Microsoft login redirect, but got different URL")
+
+            # Step 3: Wait for redirect back to schulnetz (either domain)
+            log.info("Waiting for redirect back to schulnetz...")
+            
+            # Wait for either schulnetz.bbbaden.ch or schulnetz.web.app
+            try:
+                await page.wait_for_url("https://schulnetz.bbbaden.ch/*", timeout=15000)
+                log.info("Redirected to schulnetz.bbbaden.ch domain")
+            except:
+                try:
+                    await page.wait_for_url("https://schulnetz.web.app/*", timeout=15000)
+                    log.info("Redirected to schulnetz.web.app domain")
+                except:
+                    # If neither works, just check current URL
+                    log.info("No expected redirect domain found, checking current URL...")
+            
+            current_url = page.url
+            log.info(f"OAuth2 redirect URL: {current_url}")
+
+            # Step 4: Extract auth code for mobile OAuth2 flow
+            auth_code, received_state = extract_auth_code_from_url(current_url)
+            if not auth_code:
+                log.error("No authorization code found in OAuth2 redirect URL")
+                return {
+                    "success": False, 
+                    "error": "Failed to obtain authorization code from OAuth2 flow"
+                }
+
+            log.info(f"Successfully obtained OAuth2 auth code: {auth_code[:30]}...")
+            validate_state_parameter(state, received_state)
+
+            # Step 5: Extract session cookies from current browser context
+            cookies = await context.cookies()
+            session_cookies = {}
+            
+            for cookie in cookies:
+                session_cookies[cookie['name']] = cookie['value']
+                log.info(f"Captured cookie: {cookie['name']} (domain: {cookie['domain']})")
+
+            log.info(f"Captured {len(session_cookies)} session cookies")
+
+            # Step 6: Now navigate to establish web session (this will use existing Microsoft session)
+            log.info("Establishing web interface session...")
+            
+            # Try to navigate to the main schulnetz domain for web session
+            try:
+                await page.goto("https://schulnetz.bbbaden.ch/", wait_until='load', timeout=30000)
+                log.info("Successfully established web session on schulnetz.bbbaden.ch")
+                
+                # Update cookies after web session establishment
+                updated_cookies = await context.cookies()
+                for cookie in updated_cookies:
+                    if cookie['name'] not in session_cookies:
+                        session_cookies[cookie['name']] = cookie['value']
+                        log.info(f"Added new web session cookie: {cookie['name']}")
+
+                # Step 7: Extract navigation URLs from the web interface
+                try:
+                    current_html = await page.content()
+                    navigation_urls = extract_navigation_urls(current_html)
+                    noten_url = navigation_urls.get("Noten")
+                    log.info(f"Extracted {len(navigation_urls)} navigation URLs")
+                except Exception as e:
+                    log.warning(f"Could not extract navigation URLs: {e}")
+                    navigation_urls = {}
+                    noten_url = None
+                    
+            except Exception as e:
+                log.warning(f"Could not establish web session on schulnetz.bbbaden.ch: {e}")
+                # Still proceed with the mobile tokens, web session will be limited
+                navigation_urls = {}
+                noten_url = None
+
+        except Exception as e:
+            log.error(f"Error during unified authentication flow: {e}")
+            return {
+                "success": False, 
+                "error": f"Unified authentication failed: {str(e)}"
+            }
+        finally:
+            await browser.close()
+
+    # Step 8: Exchange auth code for OAuth2 tokens (outside browser context)
+    try:
+        log.info("Exchanging authorization code for OAuth2 tokens...")
+        access_token, refresh_token = await exchange_code_for_tokens(auth_code, code_verifier)
+        
+        if not access_token:
+            return {
+                "success": False, 
+                "error": "Failed to exchange authorization code for OAuth2 tokens"
+            }
+
+        log.info(f"Successfully obtained access token: {access_token[:30]}...")
+
+    except Exception as e:
+        log.error(f"Token exchange failed: {e}")
+        return {
+            "success": False, 
+            "error": f"Token exchange failed: {str(e)}"
+        }
+
+    # Step 9: Return unified authentication result
+    return {
+        "success": True,
+        "message": "Unified authentication completed successfully",
+        # Mobile OAuth2 data
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        # Web session data
+        "session_cookies": session_cookies,
+        "auth_code": auth_code,
+        "navigation_urls": navigation_urls,
+        "noten_url": noten_url,
+        # Metadata
+        "session_types": ["mobile", "web"],
+        "authenticated_at": str(datetime.now())
+    }
+
+async def authenticate_unified_webapp_flow(email: str, password: str) -> Dict[str, Any]:
+    """
+    Alternative unified authentication that properly handles the schulnetz.web.app redirect flow.
+    
+    Args:
+        email: Microsoft account email
+        password: Microsoft account password
+        
+    Returns:
+        Dictionary with both web session cookies and mobile OAuth2 tokens
+    """
+    log.info("Starting unified authentication flow with web.app handling...")
+
+    # Generate PKCE parameters for mobile OAuth2 flow
+    code_verifier, code_challenge = generate_pkce_challenge()
+    state = generate_random_string(32)
+    nonce = generate_random_string(32)
+    
+    log.info("Generated OAuth2 parameters for mobile flow:")
+    log.info(f"  Code Verifier: {code_verifier}")
+    log.info(f"  Code Challenge: {code_challenge}")
+    log.info(f"  State: {state}")
+    log.info(f"  Nonce: {nonce}")
+
+    async with async_playwright() as playwright:
+        browser = await playwright.chromium.launch(headless=True)
+        context = await browser.new_context()
+        page = await context.new_page()
+
+        # Variables to capture auth code during redirect
+        auth_code = None
+        received_state = None
+        redirect_domain = None
+
+        # Set up response listener to capture auth code from intermediate redirects
+        async def handle_response(response):
+            nonlocal auth_code, received_state, redirect_domain
+            if auth_code:  # Already found, skip
+                return
+                
+            url = response.url
+            log.info(f"Response URL: {url}")
+            
+            # Check if this is a callback URL with auth code
+            if ("schulnetz.web.app/callback" in url or "schulnetz.bbbaden.ch" in url) and "code=" in url:
+                log.info(f"Found callback URL with auth code: {url}")
+                code, state = extract_auth_code_from_url(url)
+                if code:
+                    auth_code = code
+                    received_state = state
+                    redirect_domain = "schulnetz.web.app" if "web.app" in url else "schulnetz.bbbaden.ch"
+                    log.info(f"Captured auth code: {code[:30]}...")
+
+        page.on("response", handle_response)
+
+        try:
+            # Step 1: Start with OAuth2 authorization URL (for mobile tokens)
+            auth_params = generate_auth_params(state, code_challenge, nonce)
+            auth_url = "https://schulnetz.bbbaden.ch/authorize.php?" + urlencode(auth_params)
+            
+            log.info(f"Navigating to OAuth2 authorization URL: {auth_url}")
+            await page.goto(auth_url, wait_until='load', timeout=60000)
+
+            # Step 2: Handle Microsoft authentication
+            log.info(f"Current URL after redirect: {page.url}")
+            if "login.microsoftonline.com" in page.url:
+                log.info("Handling Microsoft authentication...")
+                await perform_microsoft_login(page, email, password)
+                await handle_post_login_flow(page)
+            else:
+                log.warning("Expected Microsoft login redirect, but got different URL")
+
+            # Step 3: Wait for auth code to be captured by response handler
+            log.info("Waiting for OAuth2 callback with auth code...")
+            
+            # Wait up to 30 seconds for auth code to be captured
+            for i in range(60):  # 60 * 0.5 = 30 seconds
+                if auth_code:
+                    log.info(f"Auth code captured successfully: {auth_code[:30]}...")
+                    break
+                await asyncio.sleep(0.5)
+            
+            # Also check current URL as fallback
+            current_url = page.url
+            log.info(f"Current URL after auth: {current_url}")
+            
+            if not auth_code:
+                # Fallback: try to extract from current URL
+                auth_code, received_state = extract_auth_code_from_url(current_url)
+                redirect_domain = "schulnetz.web.app" if "web.app" in current_url else "schulnetz.bbbaden.ch"
+
+            if not auth_code:
+                log.error(f"No authorization code found. Final URL: {current_url}")
+                return {
+                    "success": False, 
+                    "error": f"Failed to obtain authorization code. Final URL: {current_url}"
+                }
+
+            log.info(f"Successfully obtained OAuth2 auth code: {auth_code[:30]}...")
+            validate_state_parameter(state, received_state)
+
+            # Step 4: Extract session cookies from current browser context
+            cookies = await context.cookies()
+            session_cookies = {}
+            
+            for cookie in cookies:
+                session_cookies[cookie['name']] = cookie['value']
+                log.info(f"Captured cookie: {cookie['name']} (domain: {cookie['domain']})")
+
+            log.info(f"Captured {len(session_cookies)} session cookies")
+
+            # Step 5: Try to establish web session on schulnetz.bbbaden.ch
+            log.info("Attempting to establish web interface session...")
+            navigation_urls = {}
+            noten_url = None
+            
+            try:
+                # Navigate to the main domain using existing session
+                await page.goto("https://schulnetz.bbbaden.ch/", wait_until='load', timeout=30000)
+                
+                # Check if we're logged in or redirected back to Microsoft
+                if "login.microsoftonline.com" not in page.url:
+                    log.info("Successfully accessed web interface")
+                    
+                    # Update cookies after accessing main domain
+                    updated_cookies = await context.cookies()
+                    for cookie in updated_cookies:
+                        if cookie['name'] not in session_cookies:
+                            session_cookies[cookie['name']] = cookie['value']
+                            log.info(f"Added new web session cookie: {cookie['name']}")
+
+                    # Extract navigation URLs
+                    try:
+                        current_html = await page.content()
+                        navigation_urls = extract_navigation_urls(current_html)
+                        noten_url = navigation_urls.get("Noten")
+                        log.info(f"Extracted {len(navigation_urls)} navigation URLs")
+                    except Exception as e:
+                        log.warning(f"Could not extract navigation URLs: {e}")
+                else:
+                    log.warning("Still redirected to Microsoft login, web session may not be fully established")
+                    
+            except Exception as e:
+                log.warning(f"Could not access web interface: {e}")
+
+        except Exception as e:
+            log.error(f"Error during unified authentication flow: {e}")
+            return {
+                "success": False, 
+                "error": f"Unified authentication failed: {str(e)}"
+            }
+        finally:
+            await browser.close()
+
+    # Step 6: Exchange auth code for OAuth2 tokens (outside browser context)
+    try:
+        log.info("Exchanging authorization code for OAuth2 tokens...")
+        access_token, refresh_token = await exchange_code_for_tokens(auth_code, code_verifier)
+        
+        if not access_token:
+            return {
+                "success": False, 
+                "error": "Failed to exchange authorization code for OAuth2 tokens"
+            }
+
+        log.info(f"Successfully obtained access token: {access_token[:30]}...")
+
+    except Exception as e:
+        log.error(f"Token exchange failed: {e}")
+        return {
+            "success": False, 
+            "error": f"Token exchange failed: {str(e)}"
+        }
+
+    # Step 7: Return unified authentication result
+    return {
+        "success": True,
+        "message": "Unified authentication completed successfully",
+        # Mobile OAuth2 data
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        # Web session data
+        "session_cookies": session_cookies,
+        "auth_code": auth_code,
+        "navigation_urls": navigation_urls,
+        "noten_url": noten_url,
+        # Metadata
+        "session_types": ["mobile", "web"],
+        "authenticated_at": str(datetime.now()),
+        "redirect_domain": redirect_domain or "unknown"
+    }
+
+async def authenticate_unified_with_navigation_listener(email: str, password: str) -> Dict[str, Any]:
+    """
+    Unified authentication using navigation listener to capture auth code during redirects.
+    
+    Args:
+        email: Microsoft account email
+        password: Microsoft account password
+        
+    Returns:
+        Dictionary with both web session cookies and mobile OAuth2 tokens
+    """
+    log.info("Starting unified authentication with navigation listener...")
+
+    # Generate PKCE parameters for mobile OAuth2 flow
+    code_verifier, code_challenge = generate_pkce_challenge()
+    state = generate_random_string(32)
+    nonce = generate_random_string(32)
+    
+    log.info("Generated OAuth2 parameters for mobile flow:")
+    log.info(f"  Code Verifier: {code_verifier}")
+    log.info(f"  Code Challenge: {code_challenge}")
+    log.info(f"  State: {state}")
+    log.info(f"  Nonce: {nonce}")
+
+    async with async_playwright() as playwright:
+        browser = await playwright.chromium.launch(headless=True)
+        context = await browser.new_context()
+        page = await context.new_page()
+
+        # Variables to capture auth code during navigation
+        auth_code = None
+        received_state = None
+        redirect_domain = None
+
+        # Set up frame navigation listener
+        def handle_frame_navigated(frame):
+            nonlocal auth_code, received_state, redirect_domain
+            if auth_code:  # Already found
+                return
+                
+            url = frame.url
+            log.info(f"Frame navigated to: {url}")
+            
+            # Check if this URL contains the auth code
+            if "code=" in url and ("schulnetz" in url):
+                log.info(f"Found URL with auth code: {url}")
+                code, state = extract_auth_code_from_url(url)
+                if code:
+                    auth_code = code
+                    received_state = state
+                    redirect_domain = "schulnetz.web.app" if "web.app" in url else "schulnetz.bbbaden.ch"
+                    log.info(f"Captured auth code from navigation: {code[:30]}...")
+
+        page.on("framenavigated", handle_frame_navigated)
+
+        try:
+            # Step 1: Start with OAuth2 authorization URL
+            auth_params = generate_auth_params(state, code_challenge, nonce)
+            auth_url = "https://schulnetz.bbbaden.ch/authorize.php?" + urlencode(auth_params)
+            
+            log.info(f"Navigating to OAuth2 authorization URL: {auth_url}")
+            await page.goto(auth_url, wait_until='load', timeout=60000)
+
+            # Step 2: Handle Microsoft authentication
+            log.info(f"Current URL after redirect: {page.url}")
+            if "login.microsoftonline.com" in page.url:
+                log.info("Handling Microsoft authentication...")
+                await perform_microsoft_login(page, email, password)
+                await handle_post_login_flow(page)
+
+            # Step 3: Wait for auth code to be captured
+            log.info("Waiting for navigation to capture auth code...")
+            
+            # Wait up to 30 seconds for auth code
+            for i in range(60):
+                if auth_code:
+                    break
+                await asyncio.sleep(0.5)
+            
+            # Also check the current URL as backup
+            if not auth_code:
+                current_url = page.url
+                log.info(f"Checking current URL for auth code: {current_url}")
+                auth_code, received_state = extract_auth_code_from_url(current_url)
+                redirect_domain = "schulnetz.web.app" if "web.app" in current_url else "schulnetz.bbbaden.ch"
+
+            if not auth_code:
+                return {
+                    "success": False,
+                    "error": f"No authorization code captured. Final URL: {page.url}"
+                }
+
+            log.info(f"Successfully obtained auth code: {auth_code[:30]}...")
+            validate_state_parameter(state, received_state)
+
+            # Step 4: Extract session cookies
+            cookies = await context.cookies()
+            session_cookies = {}
+            
+            for cookie in cookies:
+                session_cookies[cookie['name']] = cookie['value']
+                log.info(f"Captured cookie: {cookie['name']} (domain: {cookie['domain']})")
+
+            # Step 5: Try to establish web session
+            navigation_urls = {}
+            noten_url = None
+            
+            try:
+                await page.goto("https://schulnetz.bbbaden.ch/", wait_until='load', timeout=30000)
+                
+                if "login.microsoftonline.com" not in page.url:
+                    # Update cookies
+                    updated_cookies = await context.cookies()
+                    for cookie in updated_cookies:
+                        if cookie['name'] not in session_cookies:
+                            session_cookies[cookie['name']] = cookie['value']
+
+                    # Extract navigation
+                    current_html = await page.content()
+                    navigation_urls = extract_navigation_urls(current_html)
+                    noten_url = navigation_urls.get("Noten")
+                    
+            except Exception as e:
+                log.warning(f"Could not establish web session: {e}")
+
+        except Exception as e:
+            log.error(f"Error during unified authentication: {e}")
+            return {"success": False, "error": f"Authentication failed: {str(e)}"}
+        finally:
+            await browser.close()
+
+    # Step 6: Exchange for tokens
+    try:
+        access_token, refresh_token = await exchange_code_for_tokens(auth_code, code_verifier)
+        
+        if not access_token:
+            return {"success": False, "error": "Token exchange failed"}
+
+        return {
+            "success": True,
+            "message": "Unified authentication completed successfully",
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "session_cookies": session_cookies,
+            "auth_code": auth_code,
+            "navigation_urls": navigation_urls,
+            "noten_url": noten_url,
+            "session_types": ["mobile", "web"],
+            "authenticated_at": str(datetime.now()),
+            "redirect_domain": redirect_domain or "unknown"
+        }
+        
+    except Exception as e:
+        log.error(f"Token exchange error: {e}")
+        return {"success": False, "error": f"Token exchange failed: {str(e)}"}
+
+async def authenticate_with_existing_session(session_cookies: Dict[str, str], auth_type: str) -> Dict[str, Any]:
+    """
+    Attempt authentication using existing session cookies without full Microsoft login.
+    
+    Args:
+        session_cookies: Existing session cookies from previous authentication
+        auth_type: "mobile" or "web" or "unified"
+        
+    Returns:
+        Authentication result dictionary
+    """
+    try:
+        log.info(f"Attempting {auth_type} authentication with existing session cookies...")
+        
+        if auth_type == "web" or auth_type == "unified":
+            # Test web session by accessing main page
+            try:
+                response = await make_authenticated_web_request(
+                    "https://schulnetz.bbbaden.ch/index.php", 
+                    session_cookies,
+                    follow_redirects=False  # Don't follow redirects to detect if session is invalid
+                )
+                
+                if response.status_code == 200:
+                    log.info("Web session is still valid")
+                    
+                    # Extract navigation URLs if requested
+                    if auth_type == "unified":
+                        navigation_urls = extract_navigation_urls(response.text)
+                        noten_url = navigation_urls.get("Noten")
+                    else:
+                        navigation_urls = {}
+                        noten_url = None
+                    
+                    return {
+                        "success": True,
+                        "message": "Existing web session is valid",
+                        "session_cookies": session_cookies,
+                        "navigation_urls": navigation_urls,
+                        "noten_url": noten_url,
+                        "session_type": "web",
+                        "source": "existing_session"
+                    }
+                else:
+                    log.info(f"Web session invalid (status: {response.status_code})")
+                    
+            except Exception as e:
+                log.info(f"Web session test failed: {e}")
+
+        # For mobile or if web session is invalid, we'd need to do full auth
+        # since mobile tokens can't be refreshed from session cookies alone
+        if auth_type == "mobile":
+            return {
+                "success": False,
+                "error": "Mobile token refresh from session cookies not supported. Use full authentication.",
+                "requires_full_auth": True
+            }
+            
+        return {
+            "success": False,
+            "error": "Session validation failed",
+            "requires_full_auth": True
+        }
+        
+    except Exception as e:
+        log.error(f"Session validation error: {e}")
+        return {
+            "success": False,
+            "error": f"Session validation error: {str(e)}",
+            "requires_full_auth": True
+        }
+
+def extract_navigation_urls(html_content: str) -> dict:
+    """
+    Extract navigation URLs from the schulnetz main page HTML.
+    
+    Args:
+        html_content: HTML content of the main page
+        
+    Returns:
+        Dictionary mapping menu names to their URLs
+    """
+    try:
+        soup = BeautifulSoup(html_content, 'html.parser')
+        navigation_urls = {}
+        
+        # Find the main navigation menu
+        nav_menu = soup.find('nav', {'class': 'mdl-navigation', 'id': 'nav-main-menu'})
+        
+        if not nav_menu:
+            log.warning("Could not find main navigation menu in HTML")
+            return navigation_urls
+        
+        # Find all navigation links
+        nav_links = nav_menu.find_all('a', {'class': 'mdl-navigation__link'})
+        
+        for link in nav_links:
+            try:
+                # Get the href attribute
+                href = link.get('href', '')
+                
+                # Find the menu title
+                title_div = link.find('div', {'class': 'cls-page--mainmenu-subtitle'})
+                if title_div:
+                    menu_name = title_div.get_text(strip=True)
+                    
+                    # Convert relative URL to absolute URL if needed
+                    if href.startswith('index.php'):
+                        full_url = f"https://schulnetz.bbbaden.ch/{href}"
+                    else:
+                        full_url = href
+                    
+                    navigation_urls[menu_name] = full_url
+                    log.info(f"Extracted navigation link: {menu_name} -> {href}")
+                
+            except Exception as e:
+                log.warning(f"Error processing navigation link: {e}")
+                continue
+        
+        log.info(f"Successfully extracted {len(navigation_urls)} navigation URLs")
+        return navigation_urls
+        
+    except Exception as e:
+        log.error(f"Error parsing HTML for navigation URLs: {e}")
+        return {}
 
 
 # Legacy function name mapping for backward compatibility

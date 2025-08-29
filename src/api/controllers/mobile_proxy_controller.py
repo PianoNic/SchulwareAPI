@@ -11,7 +11,7 @@ from src.application.services.schulnetz_mobile_service import mobile_service
 from src.application.services.token_service import token_service
 
 router = APIRouter()
-router_tag = ["Mobile API Proxy"]
+router_tag = ["Mobile API"]
 
 SCHULNETZ_API_BASE_URL = get_env_variable("SCHULNETZ_API_BASE_URL")
 
