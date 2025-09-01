@@ -13,7 +13,6 @@
 </p>
 
 ## ⚙️ About The Project
-About The Project ⚙️
 SchulwareAPI is a unified API designed for Schulnetz systems, simplifying data access through dynamic routing. It allows access to data via mobile REST or web scraping and includes interactive Swagger UI for automatic documentation, making API understanding easier.
 
 ## ✨ Features
