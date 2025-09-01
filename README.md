@@ -3,7 +3,7 @@
   <img src="./assets/schulwareapi_logo.png" width="200" alt="SchulwareAPI Logo">
 </p>
 <p align="center">
-  <strong>A FastAPI wrapper for Schulnetz, providing a unified API with dynamic routing and simplified access.</strong>
+  <strong>Unified API for Schulnetz, simplifying data access with dynamic routing.</strong>
 </p>
 <p align="center">
   <a href="https://github.com/PianoNic/SchulwareAPI"><img src="https://badgetrack.pianonic.ch/badge?tag=schulware-api&label=visits&color=243aae&style=flat" alt="visits"/></a>
@@ -13,15 +13,12 @@
 </p>
 
 ## ✨ Features
-- **Dynamic Routing**: Configured via `endpoints.json`.
-- **Smart Headers**: Auto-applies correct headers and Authorization.
-- **Env Variables**: Securely loads sensitive data.
-- **Param Forwarding**: Transparently passes query parameters.
-- **Auto Docs**: FastAPI provides interactive Swagger UI/ReDoc.
-- **Docker Ready**: Easy containerized deployment.
-
+- **Unified API**: Access data via mobile REST or web scraping, optimized for each endpoint.
+- **Auto-Docs**: Interactive Swagger UI and `openapi.json` for easy API understanding.
+- **Docker Ready**: Simple, containerized deployment.
+  
 ## 🛠️ Compatibility
-This API has been tested on bbbaden and kanti baden Schulnetz systems.
+This API has been tested on bbbaden and ~kanti baden~ Schulnetz systems.
 
 ## 🚀 Installation
 
@@ -32,22 +29,6 @@ This API has been tested on bbbaden and kanti baden Schulnetz systems.
 ### Access the API
 API will be live at:
 - **Interactive Docs**: [http://localhost:8000/](http://localhost:8000/)
-
-
-## ⚡ Usage
-The wrapper automatically handles API key injection and sets correct request headers.
-
-**Example: Get Current User Info**
-```bash
-curl "http://localhost:8000/me" -H 'Accept: application/json'
-```
-
-**Example: Get Events with Dates**
-```bash
-curl "http://localhost:8000/me/events?min_date=2025-08-05&max_date=2025-08-06" -H 'Accept: application/json'
-```
-
-Refer to `/docs` for all proxied endpoints.
 
 ## 📜 License
 This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
