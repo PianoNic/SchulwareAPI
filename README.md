@@ -14,7 +14,7 @@
 
 ## ⚙️ About The Project
 About The Project ⚙️
-SchulwareAPI is a unified API designed for Schulnetz systems, simplifying data access through dynamic routing. It allows access to data via mobile REST or web scraping and includes interactive Swagger UI for automatic documentation, making API understanding easier. The API is Docker-ready for simple, containerized deployment.
+SchulwareAPI is a unified API designed for Schulnetz systems, simplifying data access through dynamic routing. It allows access to data via mobile REST or web scraping and includes interactive Swagger UI for automatic documentation, making API understanding easier.
 
 ## ✨ Features
 - **Unified API**: Access data via mobile REST or web scraping, optimized for each endpoint.
