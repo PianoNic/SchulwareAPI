@@ -1,8 +1,9 @@
 import importlib
 from pathlib import Path
 from typing import Optional
-from fastapi import FastAPI, APIRouter, logger
-log = logger.logger
+from fastapi import FastAPI, APIRouter
+from fastapi.logger import logger
+
 
 class RouterRegistry:
     def __init__(self, controllers_path: str = "src.api.controllers"):
@@ -16,10 +17,10 @@ class RouterRegistry:
             # This file is in /api/router_registry.py, controllers are in /api/controllers/
             controllers_dir = registry_file.parent / "controllers"
         
-        log.info(f"Scanning controllers directory: {controllers_dir}")
+        logger.info(f"Scanning controllers directory: {controllers_dir}")
         
         if not controllers_dir.exists():
-            log.warning(f"Controllers directory not found: {controllers_dir}")
+            logger.warning(f"Controllers directory not found: {controllers_dir}")
             return 0
         
         self.registered_count = 0
@@ -35,17 +36,17 @@ class RouterRegistry:
                 
                 if hasattr(module, 'router') and isinstance(module.router, APIRouter):
                     app.include_router(module.router)
-                    log.info(f"Registered: {file_path.stem}")
+                    logger.info(f"Registered: {file_path.stem}")
                     self.registered_count += 1
                 else:
-                    log.debug(f"No router found in: {module_name}")
+                    logger.debug(f"No router found in: {module_name}")
                     
             except ImportError as e:
-                log.error(f"Import failed: {module_name} - {e}")
+                logger.error(f"Import failed: {module_name} - {e}")
             except Exception as e:
-                log.error(f"Registration error: {module_name} - {e}")
+                logger.error(f"Registration error: {module_name} - {e}")
         
-        log.info(f"Successfully registered {self.registered_count} controller(s)")
+        logger.info(f"Successfully registered {self.registered_count} controller(s)")
         return self.registered_count
 
 # Global instance for easy use

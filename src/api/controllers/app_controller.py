@@ -1,7 +1,7 @@
 import os
-from fastapi import APIRouter, logger
+from fastapi import APIRouter
+from fastapi.logger import logger
 
-log = logger.logger
 router = APIRouter()
 router_tag = ["Application"]
 

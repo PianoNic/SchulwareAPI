@@ -3,9 +3,9 @@ from fastapi.responses import JSONResponse
 from typing import List, Optional
 import httpx
 import json
+from src.api.auth.token_dependency import get_current_token
 from src.application.services.env_service import get_env_variable
 from src.application.models.event import Event
-from src.api.auth.token_dependency import get_current_token
 from src.api.auth.bearer import security
 from src.application.services.schulnetz_mobile_service import mobile_service
 from src.application.services.token_service import token_service

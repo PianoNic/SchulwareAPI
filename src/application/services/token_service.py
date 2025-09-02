@@ -1,8 +1,4 @@
-import json
-import os
-from pathlib import Path
-from datetime import datetime, timedelta
-from typing import Optional, Dict, Tuple, List
+from typing import Optional, Tuple
 import httpx
 from fastapi import logger
 from src.application.services.env_service import get_env_variable
