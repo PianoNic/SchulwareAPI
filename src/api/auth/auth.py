@@ -1,9 +1,6 @@
 import asyncio
 from datetime import datetime
-import time
 from bs4 import BeautifulSoup
-import colorlog
-from fastapi import logger
 import httpx
 import hashlib
 import base64
@@ -13,11 +10,8 @@ import os
 from urllib.parse import urlparse, parse_qs, urlencode
 from typing import Optional, Tuple, Dict, Any
 from dotenv import load_dotenv
-
+from fastapi.logger import logger
 from playwright.async_api import async_playwright, Page, expect
-
-# Import database service
-from ...application.services.database_service import db_service
 
 two_fa_queue = asyncio.Queue()
 
@@ -27,30 +21,6 @@ SCHULNETZ_CLIENT_ID = os.getenv("SCHULNETZ_CLIENT_ID")
 
 if not all([SCHULNETZ_CLIENT_ID]):
     raise EnvironmentError("Missing required environment variables.")
-
-log = logger.logger
-
-# --- Robust logger configuration for colorlog and console output ---
-import logging
-
-# Set up colorlog handler if not already present
-if not getattr(log, '_colorlog_configured', False):
-    handler = colorlog.StreamHandler()
-    handler.setFormatter(colorlog.ColoredFormatter(
-        '%(log_color)s%(levelname)-8s%(reset)s %(white)s%(message)s',
-        log_colors={
-            'DEBUG':    'cyan',
-            'INFO':     'green',
-            'WARNING':  'yellow',
-            'ERROR':    'red',
-            'CRITICAL': 'bold_red',
-        }
-    ))
-    log.handlers = []  # Remove any existing handlers
-    log.addHandler(handler)
-    log.setLevel(logging.INFO)  # Set to INFO or DEBUG as needed
-    log._colorlog_configured = True
-# --- End logger configuration ---
 
 
 def generate_random_string(length: int) -> str:
@@ -84,10 +54,10 @@ def generate_auth_params(state: str, code_challenge: str, nonce: str) -> Dict[st
 
 async def handle_2fa_input(page: Page) -> None:
     """Handle 2FA token input when required."""
-    log.info("Handling 2FA authentication...")
-    log.info("Please provide 2FA token via /2FA endpoint...")
+    logger.info("Handling 2FA authentication...")
+    logger.info("Please provide 2FA token via /2FA endpoint...")
     two_fa_token = await asyncio.wait_for(two_fa_queue.get(), timeout=120)
-    log.info("Received 2FA token")
+    logger.info("Received 2FA token")
     
     two_fa_field = 'input[type="tel"], input[name="otc"]'
     await expect(page.locator(two_fa_field)).to_be_visible(timeout=20000)
@@ -99,19 +69,19 @@ async def handle_2fa_input(page: Page) -> None:
 
 async def handle_authenticator_code_display(page: Page) -> None:
     """Handle authenticator app code display."""
-    log.info("Handling authenticator code display...")
+    logger.info("Handling authenticator code display...")
     auth_number = page.locator("#idRichContext_DisplaySign")
     number_text = await auth_number.text_content()
-    log.info(f"Authentication number found: {number_text}")
+    logger.info(f"Authentication number found: {number_text}")
     
-    log.info("Waiting for authentication dialog to close...")
+    logger.info("Waiting for authentication dialog to close...")
     await auth_number.wait_for(state="hidden", timeout=60000)
-    log.info("Authentication dialog has closed")
+    logger.info("Authentication dialog has closed")
 
 
 async def handle_security_info_update(page: Page) -> None:
-    """Handle security information update dialog."""
-    log.info("Handling security information update...")
+    """Handle security information update dialogger."""
+    logger.info("Handling security information update...")
     container = page.locator('[data-automation-id="SecurityInfoRegister"]')
     await container.wait_for(state="visible", timeout=5000)
     # TODO: handle the security info update form
@@ -119,7 +89,7 @@ async def handle_security_info_update(page: Page) -> None:
 
 async def handle_stay_signed_in(page: Page) -> None:
     """Handle stay signed in prompt."""
-    log.info("Handling 'Stay signed in?' prompt...")
+    logger.info("Handling 'Stay signed in?' prompt...")
     yes_button = page.locator('#idSIButton9')
     await yes_button.wait_for(state="visible", timeout=3000)
     await yes_button.click()
@@ -130,7 +100,7 @@ async def handle_post_login_flow(page: Page) -> None:
     
     async def determine_and_handle_next_step():
         """Check what's present on the page and handle accordingly."""
-        log.info("Determining next required step...")
+        logger.info("Determining next required step...")
         
         # Define all possible elements we might encounter
         selectors = {
@@ -146,7 +116,7 @@ async def handle_post_login_flow(page: Page) -> None:
             try:
                 element = page.locator(selector)
                 await element.wait_for(state="visible", timeout=1000)
-                log.info(f"Found: {step_name}")
+                logger.info(f"Found: {step_name}")
                 
                 # Handle each step
                 if step_name == 'account_protection':
@@ -173,7 +143,7 @@ async def handle_post_login_flow(page: Page) -> None:
                 continue  # Element not found, try next
         
         # If none of the expected elements are found, we might be done or on an unexpected page
-        log.info("No expected post-login elements found - login may be complete")
+        logger.info("No expected post-login elements found - login may be complete")
 
     await determine_and_handle_next_step()
 
@@ -182,7 +152,7 @@ async def perform_microsoft_login(page: Page, email: str, password: str) -> None
     """Handle the basic Microsoft login form (email and password entry)."""
     try:
         # Step 1: Enter email
-        log.info("Entering Microsoft email...")
+        logger.info("Entering Microsoft email...")
         email_input_selector = 'input[type="email"], input[name="loginfmt"]'
         await expect(page.locator(email_input_selector)).to_be_visible(timeout=20000)
         await page.fill(email_input_selector, email)
@@ -191,7 +161,7 @@ async def perform_microsoft_login(page: Page, email: str, password: str) -> None
             await email_button.click()
 
         # Step 2: Enter password
-        log.info("Entering Microsoft password...")
+        logger.info("Entering Microsoft password...")
         password_input_selector = 'input[type="password"], input[name="passwd"]'
         await expect(page.locator(password_input_selector)).to_be_visible(timeout=20000)
         await page.fill(password_input_selector, password)
@@ -199,12 +169,12 @@ async def perform_microsoft_login(page: Page, email: str, password: str) -> None
         if await password_button.is_visible(timeout=5000):
             await password_button.click()
 
-        log.info("Basic Microsoft login form completed")
+        logger.info("Basic Microsoft login form completed")
 
     except Exception as e:
-        log.error(f"Error during Microsoft login form interaction: {e}")
-        log.info(f"Current URL: {page.url}")
-        log.info(f"Page content (partial): {(await page.content())[:1000]}")
+        logger.error(f"Error during Microsoft login form interaction: {e}")
+        logger.info(f"Current URL: {page.url}")
+        logger.info(f"Page content (partial): {(await page.content())[:1000]}")
         raise
 
 
@@ -238,8 +208,8 @@ async def get_microsoft_redirect_code(email: str, password: str, state: str, cod
     auth_params = generate_auth_params(state, code_challenge, nonce)
     auth_url = "https://schulnetz.bbbaden.ch/authorize.php?" + urlencode(auth_params)
     
-    log.info(f"Starting Microsoft authentication flow...")
-    log.info(f"Navigating to {auth_url}...")
+    logger.info(f"Starting Microsoft authentication flow...")
+    logger.info(f"Navigating to {auth_url}...")
 
     async with async_playwright() as playwright:
         browser = await playwright.chromium.launch(headless=True)
@@ -250,41 +220,41 @@ async def get_microsoft_redirect_code(email: str, password: str, state: str, cod
             await page.goto(auth_url, wait_until='load', timeout=60000)
 
             # Confirm we have landed on the Microsoft login page after the redirect
-            log.info(f"Playwright landed on: {page.url}")
+            logger.info(f"Playwright landed on: {page.url}")
             if "login.microsoftonline.com" not in page.url:
-                log.error("ERROR: Did not redirect to Microsoft login page as expected.")
-                log.info(f"Final URL: {page.url}")
-                log.info(f"Page content (partial): {(await page.content())[:1000]}")
+                logger.error("ERROR: Did not redirect to Microsoft login page as expected.")
+                logger.info(f"Final URL: {page.url}")
+                logger.info(f"Page content (partial): {(await page.content())[:1000]}")
                 return None, None
 
             # Handle the interactive Microsoft login
-            log.info("Starting interactive Microsoft login...")
+            logger.info("Starting interactive Microsoft login...")
             await perform_microsoft_login(page, email, password)
             
             # Handle any post-login flow (2FA, security updates, etc.)
             await handle_post_login_flow(page)
 
             # Extract authorization code from the final URL
-            log.info(f"After Microsoft login flow, current URL: {page.url}")
+            logger.info(f"After Microsoft login flow, current URL: {page.url}")
             auth_code, received_state = extract_auth_code_from_url(page.url)
             
             if not auth_code:
-                log.info("No auth code found immediately, waiting for additional redirects...")
+                logger.info("No auth code found immediately, waiting for additional redirects...")
                 await asyncio.sleep(5)
                 current_url = page.url
-                log.info(f"After additional wait, current URL: {current_url}")
+                logger.info(f"After additional wait, current URL: {current_url}")
                 auth_code, received_state = extract_auth_code_from_url(current_url)
             
             if auth_code:
-                log.info(f"Successfully obtained Authorization Code: {auth_code[:30]}...")
-                log.info(f"Received State: {received_state}")
+                logger.info(f"Successfully obtained Authorization Code: {auth_code[:30]}...")
+                logger.info(f"Received State: {received_state}")
             else:
-                log.warning("No authorization code found after Microsoft authentication")
+                logger.warning("No authorization code found after Microsoft authentication")
                 
             return auth_code, received_state
 
         except Exception as e:
-            log.error(f"Error during Microsoft authentication flow: {e}")
+            logger.error(f"Error during Microsoft authentication flow: {e}")
             # Uncomment the line below to save a screenshot for debugging on error
             # await page.screenshot(path="microsoft_auth_error.png")
             return None, None
@@ -332,7 +302,7 @@ async def exchange_code_for_tokens(auth_code: str, code_verifier: str) -> Tuple[
         "sec-ch-ua-platform": '"Windows"',
     }
 
-    log.info(f"Exchanging authorization code for tokens at {token_url}...")
+    logger.info(f"Exchanging authorization code for tokens at {token_url}...")
     
     try:
         token_response = await httpx_client.post(
@@ -341,26 +311,26 @@ async def exchange_code_for_tokens(auth_code: str, code_verifier: str) -> Tuple[
         token_response.raise_for_status()
         token_json = token_response.json()
 
-        log.info("Token Exchange Successful!")
-        log.info("Received Token Data:")
-        log.info(token_json)
+        logger.info("Token Exchange Successful!")
+        logger.info("Received Token Data:")
+        logger.info(token_json)
 
         access_token = token_json.get("access_token")
         refresh_token = token_json.get("refresh_token")
         
         if access_token:
-            log.info(f"Access Token obtained: {access_token[:30]}...")
+            logger.info(f"Access Token obtained: {access_token[:30]}...")
             return access_token, refresh_token
         else:
-            log.error("Access token not found in response.")
+            logger.error("Access token not found in response.")
             return None, None
 
     except httpx.RequestError as e:
-        log.error(f"HTTP error during token exchange: {e}")
+        logger.error(f"HTTP error during token exchange: {e}")
         return None, None
     except httpx.HTTPStatusError as e:
-        log.error(f"HTTP Status Error during token exchange: {e.response.status_code} - {e.response.text}")
-        log.info(f"Response content: {e.response.text}")
+        logger.error(f"HTTP Status Error during token exchange: {e.response.status_code} - {e.response.text}")
+        logger.info(f"Response content: {e.response.text}")
         return None, None
     finally:
         await httpx_client.aclose()
@@ -369,16 +339,16 @@ async def exchange_code_for_tokens(auth_code: str, code_verifier: str) -> Tuple[
 def validate_state_parameter(expected_state: str, received_state: Optional[str]) -> bool:
     """Validate OAuth2 state parameter for CSRF protection."""
     if received_state and received_state != expected_state:
-        log.warning("WARNING: State mismatch!")
-        log.info(f"  Expected: {expected_state}")
-        log.info(f"  Received: {received_state}")
-        log.info("  This could indicate a security issue, but we'll continue...")
+        logger.warning("WARNING: State mismatch!")
+        logger.info(f"  Expected: {expected_state}")
+        logger.info(f"  Received: {received_state}")
+        logger.info("  This could indicate a security issue, but we'll continue...")
         return False
     elif received_state == expected_state:
-        log.info("State validation passed.")
+        logger.info("State validation passed.")
         return True
     else:
-        log.info("Note: State validation skipped - no state received")
+        logger.info("Note: State validation skipped - no state received")
         return False
 
 
@@ -393,7 +363,7 @@ async def get_web_session_cookies(email: str, password: str) -> Tuple[Optional[D
     Returns:
         Tuple of (session_cookies_dict, auth_code) or (None, None) if failed
     """
-    log.info("Starting web authentication flow...")
+    logger.info("Starting web authentication flow...")
 
     async with async_playwright() as playwright:
         browser = await playwright.chromium.launch(headless=True)
@@ -402,32 +372,32 @@ async def get_web_session_cookies(email: str, password: str) -> Tuple[Optional[D
 
         try:
             # Step 1: Navigate to schulnetz.bbbaden.ch (will redirect to Microsoft)
-            log.info("Navigating to https://schulnetz.bbbaden.ch/...")
+            logger.info("Navigating to https://schulnetz.bbbaden.ch/...")
             await page.goto("https://schulnetz.bbbaden.ch/", wait_until='load', timeout=60000)
 
             # Step 2: Handle Microsoft authentication
-            log.info(f"Current URL after redirect: {page.url}")
+            logger.info(f"Current URL after redirect: {page.url}")
             if "login.microsoftonline.com" in page.url:
-                log.info("Handling Microsoft authentication...")
+                logger.info("Handling Microsoft authentication...")
                 await perform_microsoft_login(page, email, password)
                 await handle_post_login_flow(page)
             else:
-                log.warning("Expected Microsoft login redirect, but got different URL")
+                logger.warning("Expected Microsoft login redirect, but got different URL")
 
             # Step 3: Wait for final redirect back to schulnetz.bbbaden.ch with auth code
-            log.info("Waiting for redirect back to schulnetz.bbbaden.ch...")
+            logger.info("Waiting for redirect back to schulnetz.bbbaden.ch...")
             await page.wait_for_url("https://schulnetz.bbbaden.ch/*", timeout=30000)
             
             current_url = page.url
-            log.info(f"Final URL: {current_url}")
+            logger.info(f"Final URL: {current_url}")
 
             # Step 4: Extract auth code from URL
             auth_code, _ = extract_auth_code_from_url(current_url)
             if not auth_code:
-                log.error("No authorization code found in final URL")
+                logger.error("No authorization code found in final URL")
                 return None, None
 
-            log.info(f"Successfully obtained auth code: {auth_code[:30]}...")
+            logger.info(f"Successfully obtained auth code: {auth_code[:30]}...")
 
             # Step 5: Extract all cookies for session management
             cookies = await context.cookies()
@@ -436,14 +406,14 @@ async def get_web_session_cookies(email: str, password: str) -> Tuple[Optional[D
             for cookie in cookies:
                 # Store cookies as key-value pairs for easy use with httpx
                 session_cookies[cookie['name']] = cookie['value']
-                log.info(f"Captured cookie: {cookie['name']} (domain: {cookie['domain']})")
+                logger.info(f"Captured cookie: {cookie['name']} (domain: {cookie['domain']})")
 
-            log.info(f"Captured {len(session_cookies)} session cookies")
+            logger.info(f"Captured {len(session_cookies)} session cookies")
             
             return session_cookies, auth_code
 
         except Exception as e:
-            log.error(f"Error during web authentication flow: {e}")
+            logger.error(f"Error during web authentication flow: {e}")
             return None, None
         finally:
             await browser.close()
@@ -470,34 +440,16 @@ async def authenticate_with_web_session(email: str, password: str) -> Dict[str, 
                 "error": "Failed to obtain web session cookies or auth code"
             }
 
-        # Save session to database
-        session_id = db_service.create_session(
-            email=email,
-            auth_type="web",
-            auth_code=auth_code,
-            session_cookies=session_cookies,
-            expires_in_hours=24
-        )
-        
-        log.info(f"Saved web session to database: {session_id}")
-
         return {
             "success": True, 
             "message": "Web authentication completed successfully",
             "session_cookies": session_cookies,
             "auth_code": auth_code,
             "session_type": "web",
-            "session_id": session_id
         }
 
     except Exception as e:
-        log.error(f"Web authentication error: {e}")
-        db_service.log_event(
-            event_type="login",
-            auth_type="web",
-            message=f"Web authentication failed for {email}: {str(e)}",
-            success=False
-        )
+        logger.error(f"Web authentication error: {e}")
         return {"success": False, "error": str(e)}
 
 
@@ -564,11 +516,11 @@ async def authenticate_with_credentials(email: str, password: str, auth_type: st
             state = generate_random_string(32)
             nonce = generate_random_string(32)
             
-            log.info("Generated OAuth2 parameters:")
-            log.info(f"  Code Verifier: {code_verifier}")
-            log.info(f"  Code Challenge: {code_challenge}")
-            log.info(f"  State: {state}")
-            log.info(f"  Nonce: {nonce}")
+            logger.info("Generated OAuth2 parameters:")
+            logger.info(f"  Code Verifier: {code_verifier}")
+            logger.info(f"  Code Challenge: {code_challenge}")
+            logger.info(f"  State: {state}")
+            logger.info(f"  Nonce: {nonce}")
 
             # Step 1: Get authorization code from Microsoft
             auth_code, received_state = await get_microsoft_redirect_code(
@@ -588,18 +540,6 @@ async def authenticate_with_credentials(email: str, password: str, auth_type: st
             access_token, refresh_token = await exchange_code_for_tokens(auth_code, code_verifier)
 
             if access_token:
-                # Save mobile session to database
-                session_id = db_service.create_session(
-                    email=email,
-                    auth_type="mobile",
-                    access_token=access_token,
-                    refresh_token=refresh_token,
-                    auth_code=auth_code,
-                    expires_in_hours=1  # Mobile tokens typically expire in 1 hour
-                )
-                
-                log.info(f"Saved mobile session to database: {session_id}")
-
                 return {
                     "success": True, 
                     "message": "Authentication completed successfully",
@@ -607,7 +547,6 @@ async def authenticate_with_credentials(email: str, password: str, auth_type: st
                     "refresh_token": refresh_token,
                     "auth_code": auth_code,
                     "session_type": "mobile",
-                    "session_id": session_id
                 }
             else:
                 return {
@@ -616,13 +555,7 @@ async def authenticate_with_credentials(email: str, password: str, auth_type: st
                 }
 
         except Exception as e:
-            log.error(f"Authentication error: {e}")
-            db_service.log_event(
-                event_type="login",
-                auth_type="mobile",
-                message=f"Mobile authentication failed for {email}: {str(e)}",
-                success=False
-            )
+            logger.error(f"Authentication error: {e}")
             return {"success": False, "error": str(e)}
     else:
         return {"success": False, "error": f"Unknown auth_type: {auth_type}. Use 'mobile' or 'web'."}
@@ -642,13 +575,7 @@ async def main(email: Optional[str] = None, password: Optional[str] = None, auth
         For web: Tuple of (session_cookies_dict, auth_code) or (None, None) if failed
     """
     if not email or not password:
-        log.error("Email and password are required")
-        db_service.log_event(
-            event_type="login",
-            auth_type=auth_type,
-            message="Authentication failed: Email and password are required",
-            success=False
-        )
+        logger.error("Email and password are required")
         return None, None
 
     result = await authenticate_with_credentials(email, password, auth_type)
@@ -659,13 +586,7 @@ async def main(email: Optional[str] = None, password: Optional[str] = None, auth
         elif auth_type == "web":
             return result["session_cookies"], result["auth_code"]
     else:
-        log.error(f"Authentication failed: {result['error']}")
-        db_service.log_event(
-            event_type="login",
-            auth_type=auth_type,
-            message=f"Authentication failed for {email}: {result['error']}",
-            success=False
-        )
+        logger.error(f"Authentication failed: {result['error']}")
         return None, None
 
 
@@ -685,7 +606,7 @@ async def example_web_authenticated_request(email: str, password: str, page_id: 
     auth_result = await authenticate_with_credentials(email, password, "web")
     
     if not auth_result["success"]:
-        log.error(f"Authentication failed: {auth_result['error']}")
+        logger.error(f"Authentication failed: {auth_result['error']}")
         return None
     
     session_cookies = auth_result["session_cookies"]
@@ -695,12 +616,12 @@ async def example_web_authenticated_request(email: str, password: str, page_id: 
     
     try:
         response = await make_authenticated_web_request(url, session_cookies)
-        log.info(f"Request successful: {response.status_code}")
-        log.info(f"Response length: {len(response.content)} bytes")
+        logger.info(f"Request successful: {response.status_code}")
+        logger.info(f"Response length: {len(response.content)} bytes")
         return response.text
     
     except Exception as e:
-        log.error(f"Request failed: {e}")
+        logger.error(f"Request failed: {e}")
         return None
 
 
@@ -712,7 +633,7 @@ async def example_mobile_authenticated_request(email: str, password: str):
     auth_result = await authenticate_with_credentials(email, password, "mobile")
     
     if not auth_result["success"]:
-        log.error(f"Authentication failed: {auth_result['error']}")
+        logger.error(f"Authentication failed: {auth_result['error']}")
         return None
     
     access_token = auth_result["access_token"]
@@ -728,10 +649,10 @@ async def example_mobile_authenticated_request(email: str, password: str):
         try:
             # Example API endpoint - replace with actual endpoint
             response = await client.get("https://schulnetz.bbbaden.ch/api/some-endpoint")
-            log.info(f"API request successful: {response.status_code}")
+            logger.info(f"API request successful: {response.status_code}")
             return response.json()
         except Exception as e:
-            log.error(f"API request failed: {e}")
+            logger.error(f"API request failed: {e}")
             return None
 
 async def authenticate_unified(email: str, password: str) -> Dict[str, Any]:
@@ -746,18 +667,18 @@ async def authenticate_unified(email: str, password: str) -> Dict[str, Any]:
     Returns:
         Dictionary with both web session cookies and mobile OAuth2 tokens
     """
-    log.info("Starting unified authentication flow (web + mobile)...")
+    logger.info("Starting unified authentication flow (web + mobile)...")
 
     # Generate PKCE parameters for mobile OAuth2 flow
     code_verifier, code_challenge = generate_pkce_challenge()
     state = generate_random_string(32)
     nonce = generate_random_string(32)
     
-    log.info("Generated OAuth2 parameters for mobile flow:")
-    log.info(f"  Code Verifier: {code_verifier}")
-    log.info(f"  Code Challenge: {code_challenge}")
-    log.info(f"  State: {state}")
-    log.info(f"  Nonce: {nonce}")
+    logger.info("Generated OAuth2 parameters for mobile flow:")
+    logger.info(f"  Code Verifier: {code_verifier}")
+    logger.info(f"  Code Challenge: {code_challenge}")
+    logger.info(f"  State: {state}")
+    logger.info(f"  Nonce: {nonce}")
 
     async with async_playwright() as playwright:
         browser = await playwright.chromium.launch(headless=True)
@@ -769,46 +690,46 @@ async def authenticate_unified(email: str, password: str) -> Dict[str, Any]:
             auth_params = generate_auth_params(state, code_challenge, nonce)
             auth_url = "https://schulnetz.bbbaden.ch/authorize.php?" + urlencode(auth_params)
             
-            log.info(f"Navigating to OAuth2 authorization URL: {auth_url}")
+            logger.info(f"Navigating to OAuth2 authorization URL: {auth_url}")
             await page.goto(auth_url, wait_until='load', timeout=60000)
 
             # Step 2: Handle Microsoft authentication
-            log.info(f"Current URL after redirect: {page.url}")
+            logger.info(f"Current URL after redirect: {page.url}")
             if "login.microsoftonline.com" in page.url:
-                log.info("Handling Microsoft authentication...")
+                logger.info("Handling Microsoft authentication...")
                 await perform_microsoft_login(page, email, password)
                 await handle_post_login_flow(page)
             else:
-                log.warning("Expected Microsoft login redirect, but got different URL")
+                logger.warning("Expected Microsoft login redirect, but got different URL")
 
             # Step 3: Wait for redirect back to schulnetz (either domain)
-            log.info("Waiting for redirect back to schulnetz...")
+            logger.info("Waiting for redirect back to schulnetz...")
             
             # Wait for either schulnetz.bbbaden.ch or schulnetz.web.app
             try:
                 await page.wait_for_url("https://schulnetz.bbbaden.ch/*", timeout=15000)
-                log.info("Redirected to schulnetz.bbbaden.ch domain")
+                logger.info("Redirected to schulnetz.bbbaden.ch domain")
             except:
                 try:
                     await page.wait_for_url("https://schulnetz.web.app/*", timeout=15000)
-                    log.info("Redirected to schulnetz.web.app domain")
+                    logger.info("Redirected to schulnetz.web.app domain")
                 except:
                     # If neither works, just check current URL
-                    log.info("No expected redirect domain found, checking current URL...")
+                    logger.info("No expected redirect domain found, checking current URL...")
             
             current_url = page.url
-            log.info(f"OAuth2 redirect URL: {current_url}")
+            logger.info(f"OAuth2 redirect URL: {current_url}")
 
             # Step 4: Extract auth code for mobile OAuth2 flow
             auth_code, received_state = extract_auth_code_from_url(current_url)
             if not auth_code:
-                log.error("No authorization code found in OAuth2 redirect URL")
+                logger.error("No authorization code found in OAuth2 redirect URL")
                 return {
                     "success": False, 
                     "error": "Failed to obtain authorization code from OAuth2 flow"
                 }
 
-            log.info(f"Successfully obtained OAuth2 auth code: {auth_code[:30]}...")
+            logger.info(f"Successfully obtained OAuth2 auth code: {auth_code[:30]}...")
             validate_state_parameter(state, received_state)
 
             # Step 5: Extract session cookies from current browser context
@@ -817,44 +738,44 @@ async def authenticate_unified(email: str, password: str) -> Dict[str, Any]:
             
             for cookie in cookies:
                 session_cookies[cookie['name']] = cookie['value']
-                log.info(f"Captured cookie: {cookie['name']} (domain: {cookie['domain']})")
+                logger.info(f"Captured cookie: {cookie['name']} (domain: {cookie['domain']})")
 
-            log.info(f"Captured {len(session_cookies)} session cookies")
+            logger.info(f"Captured {len(session_cookies)} session cookies")
 
             # Step 6: Now navigate to establish web session (this will use existing Microsoft session)
-            log.info("Establishing web interface session...")
+            logger.info("Establishing web interface session...")
             
             # Try to navigate to the main schulnetz domain for web session
             try:
                 await page.goto("https://schulnetz.bbbaden.ch/", wait_until='load', timeout=30000)
-                log.info("Successfully established web session on schulnetz.bbbaden.ch")
+                logger.info("Successfully established web session on schulnetz.bbbaden.ch")
                 
                 # Update cookies after web session establishment
                 updated_cookies = await context.cookies()
                 for cookie in updated_cookies:
                     if cookie['name'] not in session_cookies:
                         session_cookies[cookie['name']] = cookie['value']
-                        log.info(f"Added new web session cookie: {cookie['name']}")
+                        logger.info(f"Added new web session cookie: {cookie['name']}")
 
                 # Step 7: Extract navigation URLs from the web interface
                 try:
                     current_html = await page.content()
                     navigation_urls = extract_navigation_urls(current_html)
                     noten_url = navigation_urls.get("Noten")
-                    log.info(f"Extracted {len(navigation_urls)} navigation URLs")
+                    logger.info(f"Extracted {len(navigation_urls)} navigation URLs")
                 except Exception as e:
-                    log.warning(f"Could not extract navigation URLs: {e}")
+                    logger.warning(f"Could not extract navigation URLs: {e}")
                     navigation_urls = {}
                     noten_url = None
                     
             except Exception as e:
-                log.warning(f"Could not establish web session on schulnetz.bbbaden.ch: {e}")
+                logger.warning(f"Could not establish web session on schulnetz.bbbaden.ch: {e}")
                 # Still proceed with the mobile tokens, web session will be limited
                 navigation_urls = {}
                 noten_url = None
 
         except Exception as e:
-            log.error(f"Error during unified authentication flow: {e}")
+            logger.error(f"Error during unified authentication flow: {e}")
             return {
                 "success": False, 
                 "error": f"Unified authentication failed: {str(e)}"
@@ -864,7 +785,7 @@ async def authenticate_unified(email: str, password: str) -> Dict[str, Any]:
 
     # Step 8: Exchange auth code for OAuth2 tokens (outside browser context)
     try:
-        log.info("Exchanging authorization code for OAuth2 tokens...")
+        logger.info("Exchanging authorization code for OAuth2 tokens...")
         access_token, refresh_token = await exchange_code_for_tokens(auth_code, code_verifier)
         
         if not access_token:
@@ -873,75 +794,30 @@ async def authenticate_unified(email: str, password: str) -> Dict[str, Any]:
                 "error": "Failed to exchange authorization code for OAuth2 tokens"
             }
 
-        log.info(f"Successfully obtained access token: {access_token[:30]}...")
+        logger.info(f"Successfully obtained access token: {access_token[:30]}...")
 
     except Exception as e:
-        log.error(f"Token exchange failed: {e}")
+        logger.error(f"Token exchange failed: {e}")
         return {
             "success": False, 
             "error": f"Token exchange failed: {str(e)}"
         }
 
-    # Save unified session to database
-    try:
-        session_id = db_service.create_session(
-            email=email,
-            auth_type="unified",
-            access_token=access_token,
-            refresh_token=refresh_token,
-            auth_code=auth_code,
-            session_cookies=session_cookies,
-            expires_in_hours=1  # Mobile tokens expire in 1 hour, web session in 24
-        )
-        
-        # Save navigation routes to database
-        if navigation_urls:
-            for route_name, route_url in navigation_urls.items():
-                db_service.save_navigation_route(
-                    session_id=session_id,
-                    route_name=route_name,
-                    route_url=route_url,
-                    route_type="navigation_menu"
-                )
-        
-        log.info(f"Saved unified session to database: {session_id}")
-        log.info(f"Saved {len(navigation_urls)} navigation routes")
-        
-        return {
-            "success": True,
-            "message": "Unified authentication completed successfully",
-            # Mobile OAuth2 data
-            "access_token": access_token,
-            "refresh_token": refresh_token,
-            # Web session data
-            "session_cookies": session_cookies,
-            "auth_code": auth_code,
-            "navigation_urls": navigation_urls,
-            "noten_url": noten_url,
-            # Metadata
-            "session_types": ["mobile", "web"],
-            "authenticated_at": str(datetime.now()),
-            "session_id": session_id
-        }
-        
-    except Exception as db_error:
-        log.error(f"Failed to save unified session to database: {db_error}")
-        # Still return success but without database persistence
-        return {
-            "success": True,
-            "message": "Unified authentication completed successfully (database save failed)",
-            # Mobile OAuth2 data
-            "access_token": access_token,
-            "refresh_token": refresh_token,
-            # Web session data
-            "session_cookies": session_cookies,
-            "auth_code": auth_code,
-            "navigation_urls": navigation_urls,
-            "noten_url": noten_url,
-            # Metadata
-            "session_types": ["mobile", "web"],
-            "authenticated_at": str(datetime.now())
-        }
+    return {
+        "success": True,
+        "message": "Unified authentication completed successfully",
+        # Mobile OAuth2 data
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        # Web session data
+        "session_cookies": session_cookies,
+        "auth_code": auth_code,
+        "navigation_urls": navigation_urls,
+        "noten_url": noten_url,
+        # Metadata
+        "session_types": ["mobile", "web"],
+        "authenticated_at": str(datetime.now())
+    }
 
 async def authenticate_unified_webapp_flow(email: str, password: str) -> Dict[str, Any]:
     """
@@ -954,18 +830,18 @@ async def authenticate_unified_webapp_flow(email: str, password: str) -> Dict[st
     Returns:
         Dictionary with both web session cookies and mobile OAuth2 tokens
     """
-    log.info("Starting unified authentication flow with web.app handling...")
+    logger.info("Starting unified authentication flow with web.app handling...")
 
     # Generate PKCE parameters for mobile OAuth2 flow
     code_verifier, code_challenge = generate_pkce_challenge()
     state = generate_random_string(32)
     nonce = generate_random_string(32)
     
-    log.info("Generated OAuth2 parameters for mobile flow:")
-    log.info(f"  Code Verifier: {code_verifier}")
-    log.info(f"  Code Challenge: {code_challenge}")
-    log.info(f"  State: {state}")
-    log.info(f"  Nonce: {nonce}")
+    logger.info("Generated OAuth2 parameters for mobile flow:")
+    logger.info(f"  Code Verifier: {code_verifier}")
+    logger.info(f"  Code Challenge: {code_challenge}")
+    logger.info(f"  State: {state}")
+    logger.info(f"  Nonce: {nonce}")
 
     async with async_playwright() as playwright:
         browser = await playwright.chromium.launch(headless=True)
@@ -984,17 +860,17 @@ async def authenticate_unified_webapp_flow(email: str, password: str) -> Dict[st
                 return
                 
             url = response.url
-            log.info(f"Response URL: {url}")
+            logger.info(f"Response URL: {url}")
             
             # Check if this is a callback URL with auth code
             if ("schulnetz.web.app/callback" in url or "schulnetz.bbbaden.ch" in url) and "code=" in url:
-                log.info(f"Found callback URL with auth code: {url}")
+                logger.info(f"Found callback URL with auth code: {url}")
                 code, state = extract_auth_code_from_url(url)
                 if code:
                     auth_code = code
                     received_state = state
                     redirect_domain = "schulnetz.web.app" if "web.app" in url else "schulnetz.bbbaden.ch"
-                    log.info(f"Captured auth code: {code[:30]}...")
+                    logger.info(f"Captured auth code: {code[:30]}...")
 
         page.on("response", handle_response)
 
@@ -1003,31 +879,31 @@ async def authenticate_unified_webapp_flow(email: str, password: str) -> Dict[st
             auth_params = generate_auth_params(state, code_challenge, nonce)
             auth_url = "https://schulnetz.bbbaden.ch/authorize.php?" + urlencode(auth_params)
             
-            log.info(f"Navigating to OAuth2 authorization URL: {auth_url}")
+            logger.info(f"Navigating to OAuth2 authorization URL: {auth_url}")
             await page.goto(auth_url, wait_until='load', timeout=60000)
 
             # Step 2: Handle Microsoft authentication
-            log.info(f"Current URL after redirect: {page.url}")
+            logger.info(f"Current URL after redirect: {page.url}")
             if "login.microsoftonline.com" in page.url:
-                log.info("Handling Microsoft authentication...")
+                logger.info("Handling Microsoft authentication...")
                 await perform_microsoft_login(page, email, password)
                 await handle_post_login_flow(page)
             else:
-                log.warning("Expected Microsoft login redirect, but got different URL")
+                logger.warning("Expected Microsoft login redirect, but got different URL")
 
             # Step 3: Wait for auth code to be captured by response handler
-            log.info("Waiting for OAuth2 callback with auth code...")
+            logger.info("Waiting for OAuth2 callback with auth code...")
             
             # Wait up to 30 seconds for auth code to be captured
             for i in range(60):  # 60 * 0.5 = 30 seconds
                 if auth_code:
-                    log.info(f"Auth code captured successfully: {auth_code[:30]}...")
+                    logger.info(f"Auth code captured successfully: {auth_code[:30]}...")
                     break
                 await asyncio.sleep(0.5)
             
             # Also check current URL as fallback
             current_url = page.url
-            log.info(f"Current URL after auth: {current_url}")
+            logger.info(f"Current URL after auth: {current_url}")
             
             if not auth_code:
                 # Fallback: try to extract from current URL
@@ -1035,13 +911,13 @@ async def authenticate_unified_webapp_flow(email: str, password: str) -> Dict[st
                 redirect_domain = "schulnetz.web.app" if "web.app" in current_url else "schulnetz.bbbaden.ch"
 
             if not auth_code:
-                log.error(f"No authorization code found. Final URL: {current_url}")
+                logger.error(f"No authorization code found. Final URL: {current_url}")
                 return {
                     "success": False, 
                     "error": f"Failed to obtain authorization code. Final URL: {current_url}"
                 }
 
-            log.info(f"Successfully obtained OAuth2 auth code: {auth_code[:30]}...")
+            logger.info(f"Successfully obtained OAuth2 auth code: {auth_code[:30]}...")
             validate_state_parameter(state, received_state)
 
             # Step 4: Extract session cookies from current browser context
@@ -1050,12 +926,12 @@ async def authenticate_unified_webapp_flow(email: str, password: str) -> Dict[st
             
             for cookie in cookies:
                 session_cookies[cookie['name']] = cookie['value']
-                log.info(f"Captured cookie: {cookie['name']} (domain: {cookie['domain']})")
+                logger.info(f"Captured cookie: {cookie['name']} (domain: {cookie['domain']})")
 
-            log.info(f"Captured {len(session_cookies)} session cookies")
+            logger.info(f"Captured {len(session_cookies)} session cookies")
 
             # Step 5: Try to establish web session on schulnetz.bbbaden.ch
-            log.info("Attempting to establish web interface session...")
+            logger.info("Attempting to establish web interface session...")
             navigation_urls = {}
             noten_url = None
             
@@ -1065,31 +941,31 @@ async def authenticate_unified_webapp_flow(email: str, password: str) -> Dict[st
                 
                 # Check if we're logged in or redirected back to Microsoft
                 if "login.microsoftonline.com" not in page.url:
-                    log.info("Successfully accessed web interface")
+                    logger.info("Successfully accessed web interface")
                     
                     # Update cookies after accessing main domain
                     updated_cookies = await context.cookies()
                     for cookie in updated_cookies:
                         if cookie['name'] not in session_cookies:
                             session_cookies[cookie['name']] = cookie['value']
-                            log.info(f"Added new web session cookie: {cookie['name']}")
+                            logger.info(f"Added new web session cookie: {cookie['name']}")
 
                     # Extract navigation URLs
                     try:
                         current_html = await page.content()
                         navigation_urls = extract_navigation_urls(current_html)
                         noten_url = navigation_urls.get("Noten")
-                        log.info(f"Extracted {len(navigation_urls)} navigation URLs")
+                        logger.info(f"Extracted {len(navigation_urls)} navigation URLs")
                     except Exception as e:
-                        log.warning(f"Could not extract navigation URLs: {e}")
+                        logger.warning(f"Could not extract navigation URLs: {e}")
                 else:
-                    log.warning("Still redirected to Microsoft login, web session may not be fully established")
+                    logger.warning("Still redirected to Microsoft login, web session may not be fully established")
                     
             except Exception as e:
-                log.warning(f"Could not access web interface: {e}")
+                logger.warning(f"Could not access web interface: {e}")
 
         except Exception as e:
-            log.error(f"Error during unified authentication flow: {e}")
+            logger.error(f"Error during unified authentication flow: {e}")
             return {
                 "success": False, 
                 "error": f"Unified authentication failed: {str(e)}"
@@ -1099,7 +975,7 @@ async def authenticate_unified_webapp_flow(email: str, password: str) -> Dict[st
 
     # Step 6: Exchange auth code for OAuth2 tokens (outside browser context)
     try:
-        log.info("Exchanging authorization code for OAuth2 tokens...")
+        logger.info("Exchanging authorization code for OAuth2 tokens...")
         access_token, refresh_token = await exchange_code_for_tokens(auth_code, code_verifier)
         
         if not access_token:
@@ -1108,77 +984,31 @@ async def authenticate_unified_webapp_flow(email: str, password: str) -> Dict[st
                 "error": "Failed to exchange authorization code for OAuth2 tokens"
             }
 
-        log.info(f"Successfully obtained access token: {access_token[:30]}...")
+        logger.info(f"Successfully obtained access token: {access_token[:30]}...")
 
     except Exception as e:
-        log.error(f"Token exchange failed: {e}")
+        logger.error(f"Token exchange failed: {e}")
         return {
             "success": False, 
             "error": f"Token exchange failed: {str(e)}"
         }
 
-    # Save unified session to database
-    try:
-        session_id = db_service.create_session(
-            email=email,
-            auth_type="unified_webapp",
-            access_token=access_token,
-            refresh_token=refresh_token,
-            auth_code=auth_code,
-            session_cookies=session_cookies,
-            expires_in_hours=1
-        )
-        
-        # Save navigation routes to database
-        if navigation_urls:
-            for route_name, route_url in navigation_urls.items():
-                db_service.save_navigation_route(
-                    session_id=session_id,
-                    route_name=route_name,
-                    route_url=route_url,
-                    route_type="navigation_menu"
-                )
-        
-        log.info(f"Saved unified webapp session to database: {session_id}")
-        log.info(f"Saved {len(navigation_urls)} navigation routes")
-        
-        return {
-            "success": True,
-            "message": "Unified authentication completed successfully",
-            # Mobile OAuth2 data
-            "access_token": access_token,
-            "refresh_token": refresh_token,
-            # Web session data
-            "session_cookies": session_cookies,
-            "auth_code": auth_code,
-            "navigation_urls": navigation_urls,
-            "noten_url": noten_url,
-            # Metadata
-            "session_types": ["mobile", "web"],
-            "authenticated_at": str(datetime.now()),
-            "redirect_domain": redirect_domain or "unknown",
-            "session_id": session_id
-        }
-        
-    except Exception as db_error:
-        log.error(f"Failed to save unified webapp session to database: {db_error}")
-        # Still return success but without database persistence
-        return {
-            "success": True,
-            "message": "Unified authentication completed successfully (database save failed)",
-            # Mobile OAuth2 data
-            "access_token": access_token,
-            "refresh_token": refresh_token,
-            # Web session data
-            "session_cookies": session_cookies,
-            "auth_code": auth_code,
-            "navigation_urls": navigation_urls,
-            "noten_url": noten_url,
-            # Metadata
-            "session_types": ["mobile", "web"],
-            "authenticated_at": str(datetime.now()),
-            "redirect_domain": redirect_domain or "unknown"
-        }
+    return {
+        "success": True,
+        "message": "Unified authentication completed successfully",
+        # Mobile OAuth2 data
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        # Web session data
+        "session_cookies": session_cookies,
+        "auth_code": auth_code,
+        "navigation_urls": navigation_urls,
+        "noten_url": noten_url,
+        # Metadata
+        "session_types": ["mobile", "web"],
+        "authenticated_at": str(datetime.now()),
+        "redirect_domain": redirect_domain or "unknown"
+    }
 
 async def authenticate_unified_with_navigation_listener(email: str, password: str) -> Dict[str, Any]:
     """
@@ -1191,18 +1021,18 @@ async def authenticate_unified_with_navigation_listener(email: str, password: st
     Returns:
         Dictionary with both web session cookies and mobile OAuth2 tokens
     """
-    log.info("Starting unified authentication with navigation listener...")
+    logger.info("Starting unified authentication with navigation listener...")
 
     # Generate PKCE parameters for mobile OAuth2 flow
     code_verifier, code_challenge = generate_pkce_challenge()
     state = generate_random_string(32)
     nonce = generate_random_string(32)
     
-    log.info("Generated OAuth2 parameters for mobile flow:")
-    log.info(f"  Code Verifier: {code_verifier}")
-    log.info(f"  Code Challenge: {code_challenge}")
-    log.info(f"  State: {state}")
-    log.info(f"  Nonce: {nonce}")
+    logger.info("Generated OAuth2 parameters for mobile flow:")
+    logger.info(f"  Code Verifier: {code_verifier}")
+    logger.info(f"  Code Challenge: {code_challenge}")
+    logger.info(f"  State: {state}")
+    logger.info(f"  Nonce: {nonce}")
 
     async with async_playwright() as playwright:
         browser = await playwright.chromium.launch(headless=True)
@@ -1221,17 +1051,17 @@ async def authenticate_unified_with_navigation_listener(email: str, password: st
                 return
                 
             url = frame.url
-            log.info(f"Frame navigated to: {url}")
+            logger.info(f"Frame navigated to: {url}")
             
             # Check if this URL contains the auth code
             if "code=" in url and ("schulnetz" in url):
-                log.info(f"Found URL with auth code: {url}")
+                logger.info(f"Found URL with auth code: {url}")
                 code, state = extract_auth_code_from_url(url)
                 if code:
                     auth_code = code
                     received_state = state
                     redirect_domain = "schulnetz.web.app" if "web.app" in url else "schulnetz.bbbaden.ch"
-                    log.info(f"Captured auth code from navigation: {code[:30]}...")
+                    logger.info(f"Captured auth code from navigation: {code[:30]}...")
 
         page.on("framenavigated", handle_frame_navigated)
 
@@ -1240,18 +1070,18 @@ async def authenticate_unified_with_navigation_listener(email: str, password: st
             auth_params = generate_auth_params(state, code_challenge, nonce)
             auth_url = "https://schulnetz.bbbaden.ch/authorize.php?" + urlencode(auth_params)
             
-            log.info(f"Navigating to OAuth2 authorization URL: {auth_url}")
+            logger.info(f"Navigating to OAuth2 authorization URL: {auth_url}")
             await page.goto(auth_url, wait_until='load', timeout=60000)
 
             # Step 2: Handle Microsoft authentication
-            log.info(f"Current URL after redirect: {page.url}")
+            logger.info(f"Current URL after redirect: {page.url}")
             if "login.microsoftonline.com" in page.url:
-                log.info("Handling Microsoft authentication...")
+                logger.info("Handling Microsoft authentication...")
                 await perform_microsoft_login(page, email, password)
                 await handle_post_login_flow(page)
 
             # Step 3: Wait for auth code to be captured
-            log.info("Waiting for navigation to capture auth code...")
+            logger.info("Waiting for navigation to capture auth code...")
             
             # Wait up to 30 seconds for auth code
             for i in range(60):
@@ -1262,7 +1092,7 @@ async def authenticate_unified_with_navigation_listener(email: str, password: st
             # Also check the current URL as backup
             if not auth_code:
                 current_url = page.url
-                log.info(f"Checking current URL for auth code: {current_url}")
+                logger.info(f"Checking current URL for auth code: {current_url}")
                 auth_code, received_state = extract_auth_code_from_url(current_url)
                 redirect_domain = "schulnetz.web.app" if "web.app" in current_url else "schulnetz.bbbaden.ch"
 
@@ -1272,7 +1102,7 @@ async def authenticate_unified_with_navigation_listener(email: str, password: st
                     "error": f"No authorization code captured. Final URL: {page.url}"
                 }
 
-            log.info(f"Successfully obtained auth code: {auth_code[:30]}...")
+            logger.info(f"Successfully obtained auth code: {auth_code[:30]}...")
             validate_state_parameter(state, received_state)
 
             # Step 4: Extract session cookies
@@ -1281,7 +1111,7 @@ async def authenticate_unified_with_navigation_listener(email: str, password: st
             
             for cookie in cookies:
                 session_cookies[cookie['name']] = cookie['value']
-                log.info(f"Captured cookie: {cookie['name']} (domain: {cookie['domain']})")
+                logger.info(f"Captured cookie: {cookie['name']} (domain: {cookie['domain']})")
 
             # Step 5: Try to establish web session
             navigation_urls = {}
@@ -1303,10 +1133,10 @@ async def authenticate_unified_with_navigation_listener(email: str, password: st
                     noten_url = navigation_urls.get("Noten")
                     
             except Exception as e:
-                log.warning(f"Could not establish web session: {e}")
+                logger.warning(f"Could not establish web session: {e}")
 
         except Exception as e:
-            log.error(f"Error during unified authentication: {e}")
+            logger.error(f"Error during unified authentication: {e}")
             return {"success": False, "error": f"Authentication failed: {str(e)}"}
         finally:
             await browser.close()
@@ -1320,65 +1150,22 @@ async def authenticate_unified_with_navigation_listener(email: str, password: st
         # Do NOT return here! Let it continue to the DB save code below.
 
     except Exception as e:
-        log.error(f"Token exchange error: {e}")
+        logger.error(f"Token exchange error: {e}")
         return {"success": False, "error": f"Token exchange failed: {str(e)}"}
 
-    # Save unified session to database
-    try:
-        session_id = db_service.create_session(
-            email=email,
-            auth_type="unified_nav_listener",
-            access_token=access_token,
-            refresh_token=refresh_token,
-            auth_code=auth_code,
-            session_cookies=session_cookies,
-            expires_in_hours=1
-        )
-        
-        # Save navigation routes to database
-        if navigation_urls:
-            for route_name, route_url in navigation_urls.items():
-                db_service.save_navigation_route(
-                    session_id=session_id,
-                    route_name=route_name,
-                    route_url=route_url,
-                    route_type="navigation_menu"
-                )
-        
-        log.info(f"Saved unified navigation listener session to database: {session_id}")
-        log.info(f"Saved {len(navigation_urls)} navigation routes")
-        
-        return {
-            "success": True,
-            "message": "Unified authentication completed successfully",
-            "access_token": access_token,
-            "refresh_token": refresh_token,
-            "session_cookies": session_cookies,
-            "auth_code": auth_code,
-            "navigation_urls": navigation_urls,
-            "noten_url": noten_url,
-            "session_types": ["mobile", "web"],
-            "authenticated_at": str(datetime.now()),
-            "redirect_domain": redirect_domain or "unknown",
-            "session_id": session_id
-        }
-        
-    except Exception as db_error:
-        log.error(f"Failed to save unified navigation listener session to database: {db_error}")
-        # Still return success but without database persistence
-        return {
-            "success": True,
-            "message": "Unified authentication completed successfully (database save failed)",
-            "access_token": access_token,
-            "refresh_token": refresh_token,
-            "session_cookies": session_cookies,
-            "auth_code": auth_code,
-            "navigation_urls": navigation_urls,
-            "noten_url": noten_url,
-            "session_types": ["mobile", "web"],
-            "authenticated_at": str(datetime.now()),
-            "redirect_domain": redirect_domain or "unknown"
-        }
+    return {
+        "success": True,
+        "message": "Unified authentication completed successfully",
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "session_cookies": session_cookies,
+        "auth_code": auth_code,
+        "navigation_urls": navigation_urls,
+        "noten_url": noten_url,
+        "session_types": ["mobile", "web"],
+        "authenticated_at": str(datetime.now()),
+        "redirect_domain": redirect_domain or "unknown"
+    }
 
 async def authenticate_with_existing_session(session_cookies: Dict[str, str], auth_type: str) -> Dict[str, Any]:
     """
@@ -1392,7 +1179,7 @@ async def authenticate_with_existing_session(session_cookies: Dict[str, str], au
         Authentication result dictionary
     """
     try:
-        log.info(f"Attempting {auth_type} authentication with existing session cookies...")
+        logger.info(f"Attempting {auth_type} authentication with existing session cookies...")
         
         if auth_type == "web" or auth_type == "unified":
             # Test web session by accessing main page
@@ -1404,7 +1191,7 @@ async def authenticate_with_existing_session(session_cookies: Dict[str, str], au
                 )
                 
                 if response.status_code == 200:
-                    log.info("Web session is still valid")
+                    logger.info("Web session is still valid")
                     
                     # Extract navigation URLs if requested
                     if auth_type == "unified":
@@ -1414,31 +1201,6 @@ async def authenticate_with_existing_session(session_cookies: Dict[str, str], au
                         navigation_urls = {}
                         noten_url = None
                     
-                    # Save validated session to database
-                    try:
-                        session_id = db_service.create_session(
-                            email="existing_session",  # Placeholder since we don't have email
-                            auth_type=f"{auth_type}_existing",
-                            session_cookies=session_cookies,
-                            expires_in_hours=24
-                        )
-                        
-                        # Save navigation routes if extracted
-                        if navigation_urls:
-                            for route_name, route_url in navigation_urls.items():
-                                db_service.save_navigation_route(
-                                    session_id=session_id,
-                                    route_name=route_name,
-                                    route_url=route_url,
-                                    route_type="navigation_menu"
-                                )
-                        
-                        log.info(f"Saved existing session to database: {session_id}")
-                        
-                    except Exception as db_error:
-                        log.warning(f"Failed to save existing session to database: {db_error}")
-                        session_id = None
-                    
                     return {
                         "success": True,
                         "message": "Existing web session is valid",
@@ -1447,13 +1209,12 @@ async def authenticate_with_existing_session(session_cookies: Dict[str, str], au
                         "noten_url": noten_url,
                         "session_type": auth_type,
                         "source": "existing_session",
-                        "session_id": session_id
                     }
                 else:
-                    log.info(f"Web session invalid (status: {response.status_code})")
+                    logger.info(f"Web session invalid (status: {response.status_code})")
                     
             except Exception as e:
-                log.info(f"Web session test failed: {e}")
+                logger.info(f"Web session test failed: {e}")
 
         # For mobile or if web session is invalid, we'd need to do full auth
         # since mobile tokens can't be refreshed from session cookies alone
@@ -1471,13 +1232,7 @@ async def authenticate_with_existing_session(session_cookies: Dict[str, str], au
         }
         
     except Exception as e:
-        log.error(f"Session validation error: {e}")
-        db_service.log_event(
-            event_type="session_validation",
-            auth_type=auth_type,
-            message=f"Session validation failed: {str(e)}",
-            success=False
-        )
+        logger.error(f"Session validation error: {e}")
         return {
             "success": False,
             "error": f"Session validation error: {str(e)}",
@@ -1502,7 +1257,7 @@ def extract_navigation_urls(html_content: str) -> dict:
         nav_menu = soup.find('nav', {'class': 'mdl-navigation', 'id': 'nav-main-menu'})
         
         if not nav_menu:
-            log.warning("Could not find main navigation menu in HTML")
+            logger.warning("Could not find main navigation menu in HTML")
             return navigation_urls
         
         # Find all navigation links
@@ -1525,17 +1280,17 @@ def extract_navigation_urls(html_content: str) -> dict:
                         full_url = href
                     
                     navigation_urls[menu_name] = full_url
-                    log.info(f"Extracted navigation link: {menu_name} -> {href}")
+                    logger.info(f"Extracted navigation link: {menu_name} -> {href}")
                 
             except Exception as e:
-                log.warning(f"Error processing navigation link: {e}")
+                logger.warning(f"Error processing navigation link: {e}")
                 continue
         
-        log.info(f"Successfully extracted {len(navigation_urls)} navigation URLs")
+        logger.info(f"Successfully extracted {len(navigation_urls)} navigation URLs")
         return navigation_urls
         
     except Exception as e:
-        log.error(f"Error parsing HTML for navigation URLs: {e}")
+        logger.error(f"Error parsing HTML for navigation URLs: {e}")
         return {}
 
 

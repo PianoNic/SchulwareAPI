@@ -1,7 +1,12 @@
-from fastapi import FastAPI, Depends
-from fastapi.security import HTTPBearer
+from fastapi import FastAPI
+from src.application.services.db_service import setup_db
+from src.application.services.env_service import load_env
 from src.api.router_registry import router_registry
+from src.infrastructure.logging_config import setup_colored_logging
+setup_colored_logging()
 
+load_env()
+setup_db()
 
 app = FastAPI(
     title="Schulnetz API Wrapper",

@@ -1,41 +1,44 @@
-from fastapi import APIRouter, Form, HTTPException, logger, Query
+from fastapi import APIRouter, Form, HTTPException
+from fastapi.logger import logger
+from src.application.dtos.auth_dto import MobileSessionDto, WebSessionDto
+from src.application.services import db_service
 from src.api.auth.auth import (
     authenticate_unified_webapp_flow,
     authenticate_unified_with_navigation_listener, 
-    authenticate_with_existing_session,
-    authenticate_with_credentials, 
-    two_fa_queue
+    authenticate_with_credentials
 )
-from src.application.services.token_service import token_service, ApplicationType
-from src.application.services.database_service import db_service
+from src.application.services.token_service import ApplicationType
 
-log = logger.logger
 router = APIRouter()
 router_tag = ["Authorization"]
 
 @router.post("/api/authenticate/unified", tags=router_tag)
 async def authenticate_unified_api(email: str = Form(...), password: str = Form(...)):
-    """
-    Unified authentication endpoint that provides both mobile OAuth2 tokens 
-    and web session cookies in a single Microsoft login flow.
-    
-    This handles both schulnetz.bbbaden.ch and schulnetz.web.app redirect flows.
-    """
     if not email or not password:
         raise HTTPException(status_code=400, detail="Email and password are required")
     
     try:
-        log.info(f"Performing unified authentication for user: {email}")
+        logger.info(f"Performing unified authentication for user: {email}")
         
         # Try the navigation listener approach first
         result = await authenticate_unified_with_navigation_listener(email, password)
         
         # If that fails, try the response listener approach
         if not result["success"]:
-            log.info("Navigation listener approach failed, trying response listener...")
+            logger.info("Navigation listener approach failed, trying response listener...")
             result = await authenticate_unified_webapp_flow(email, password)
         
         if result["success"]:
+            mobile_session_dto = MobileSessionDto(
+                access_token=result["access_token"],
+                refresh_token=result["refresh_token"],
+                expires_in=3600
+            )
+            web_session_dto = WebSessionDto(
+                php_session_id=result["auth_code"],
+                
+            )
+            db_service.create_or_update_user(email, mobile_session_dto, web_session_dto)
             return {
                 "success": True,
                 "message": "Unified authentication successful",
@@ -52,12 +55,7 @@ async def authenticate_unified_api(email: str = Form(...), password: str = Form(
                     "navigation_urls": result["navigation_urls"],
                     "noten_url": result["noten_url"],
                     "auth_code": result["auth_code"]
-                },
-                # Metadata
-                "session_types": result["session_types"],
-                "authenticated_at": result["authenticated_at"],
-                "redirect_domain": result.get("redirect_domain", "unknown"),
-                "app_types": [ApplicationType.MOBILE_API, ApplicationType.WEB_INTERFACE]
+                }
             }
         else:
             raise HTTPException(
@@ -68,63 +66,52 @@ async def authenticate_unified_api(email: str = Form(...), password: str = Form(
     except HTTPException:
         raise
     except Exception as e:
-        log.error(f"Unified authentication error for {email}: {str(e)}")
+        logger.error(f"Unified authentication error for {email}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Unified authentication error: {str(e)}")
 
 @router.post("/api/authenticate/mobile", tags=router_tag)
-async def authenticate_mobile_api(
-    email: str = Form(None), 
-    password: str = Form(None),
-    use_existing_session: bool = Form(False)
-):
-    """
-    Authenticate user for mobile API access.
-    
-    Args:
-        email: Microsoft account email (required if not using existing session)
-        password: Microsoft account password (required if not using existing session)  
-        use_existing_session: Try to use existing session cookies from token service
-    """
-    
-    # Try existing session first if requested
-    if use_existing_session:
-        try:
-            existing_session = token_service.get_session_data(email or "unknown")
-            if existing_session and existing_session.get("session_cookies"):
-                log.info("Attempting mobile auth with existing session cookies...")
+async def authenticate_mobile_api(email: str = Form(None), password: str = Form(None), use_existing_session: bool = Form(False)):
+    # if use_existing_session:
+    #     try:
+    #         existing_session = token_service.get_session_data(email or "unknown")
+    #         if existing_session and existing_session.get("session_cookies"):
+    #             logger.info("Attempting mobile auth with existing session cookies...")
                 
-                # Note: This will likely fail since mobile tokens can't be refreshed from cookies
-                # But we try anyway and fall back to full auth
-                result = await authenticate_with_existing_session(
-                    existing_session["session_cookies"], 
-                    "mobile"
-                )
+    #             # Note: This will likely fail since mobile tokens can't be refreshed from cookies
+    #             # But we try anyway and fall back to full auth
+    #             result = await authenticate_with_existing_session(
+    #                 existing_session["session_cookies"], 
+    #                 "mobile"
+    #             )
                 
-                if result["success"]:
-                    return {
-                        "success": True,
-                        "message": "Mobile API authentication successful with existing session",
-                        "access_token": result.get("access_token"),
-                        "refresh_token": result.get("refresh_token"),
-                        "token_type": "Bearer",
-                        "expires_in": 3600,
-                        "app_type": ApplicationType.MOBILE_API,
-                        "source": "existing_session"
-                    }
-        except Exception as e:
-            log.info(f"Existing session attempt failed: {e}")
+    #             if result["success"]:
+    #                 return {
+    #                     "success": True,
+    #                     "message": "Mobile API authentication successful with existing session",
+    #                     "access_token": result.get("access_token"),
+    #                     "refresh_token": result.get("refresh_token"),
+    #                     "token_type": "Bearer",
+    #                     "expires_in": 3600,
+    #                     "app_type": ApplicationType.MOBILE_API,
+    #                     "source": "existing_session"
+    #                 }
+    #     except Exception as e:
+    #         logger.info(f"Existing session attempt failed: {e}")
     
-    # Full authentication required
     if not email or not password:
-        raise HTTPException(
-            status_code=400, 
-            detail="Email and password are required for mobile authentication"
-        )
+        raise HTTPException(status_code=400, detail="Email and password are required for mobile authentication")
     
     try:
-        log.info(f"Performing mobile authentication for user: {email}")
+        logger.info(f"Performing mobile authentication for user: {email}")
         result = await authenticate_with_credentials(email, password, "mobile")
 
+        mobile_session_dto = MobileSessionDto(
+            access_token=result["access_token"],
+            refresh_token=result["refresh_token"],
+            expires_in=3600
+        )
+        db_service.create_or_update_user(email, mobile_session_dto)
+        
         if result["success"] and result.get("access_token"):
             return {
                 "success": True,
@@ -134,72 +121,55 @@ async def authenticate_mobile_api(
                 "token_type": "Bearer",
                 "expires_in": 3600,
                 "app_type": ApplicationType.MOBILE_API,
-                "source": "full_login"
             }
         else:
-            raise HTTPException(
-                status_code=401,
-                detail=result.get("error", "Mobile authentication failed")
-            )
+            raise HTTPException(status_code=401, detail=result.get("error", "Mobile authentication failed"))
             
     except HTTPException:
         raise
     except Exception as e:
-        log.error(f"Mobile authentication error for {email}: {str(e)}")
+        logger.error(f"Mobile authentication error for {email}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Mobile authentication error: {str(e)}")
 
 
 @router.post("/api/authenticate/web", tags=router_tag)
-async def authenticate_web_interface(
-    email: str = Form(None), 
-    password: str = Form(None),
-    use_existing_session: bool = Form(False)
-):
-    """
-    Authenticate user for web interface access.
-    
-    Args:
-        email: Microsoft account email (required if not using existing session)
-        password: Microsoft account password (required if not using existing session)
-        use_existing_session: Try to use existing session cookies from token service
-    """
-    
-    # Try existing session first if requested
-    if use_existing_session:
-        try:
-            existing_session = token_service.get_session_data(email or "unknown")
-            if existing_session and existing_session.get("session_cookies"):
-                log.info("Attempting web auth with existing session cookies...")
+async def authenticate_web_interface(email: str = Form(None), password: str = Form(None), use_existing_session: bool = Form(False)):
+    # if use_existing_session:
+    #     try:
+    #         existing_session = token_service.get_session_data(email or "unknown")
+    #         if existing_session and existing_session.get("session_cookies"):
+    #             logger.info("Attempting web auth with existing session cookies...")
                 
-                result = await authenticate_with_existing_session(
-                    existing_session["session_cookies"], 
-                    "web"
-                )
+    #             result = await authenticate_with_existing_session(
+    #                 existing_session["session_cookies"], 
+    #                 "web"
+    #             )
                 
-                if result["success"]:
-                    return {
-                        "success": True,
-                        "message": "Web interface authentication successful with existing session",
-                        "session_cookies": result["session_cookies"],
-                        "navigation_urls": result["navigation_urls"],
-                        "noten_url": result["noten_url"],
-                        "app_type": ApplicationType.WEB_INTERFACE,
-                        "source": "existing_session"
-                    }
-        except Exception as e:
-            log.info(f"Existing session attempt failed: {e}")
+    #             if result["success"]:
+    #                 return {
+    #                     "success": True,
+    #                     "message": "Web interface authentication successful with existing session",
+    #                     "session_cookies": result["session_cookies"],
+    #                     "navigation_urls": result["navigation_urls"],
+    #                     "noten_url": result["noten_url"],
+    #                     "app_type": ApplicationType.WEB_INTERFACE,
+    #                     "source": "existing_session"
+    #                 }
+    #     except Exception as e:
+    #         logger.info(f"Existing session attempt failed: {e}")
     
-    # Full authentication required
     if not email or not password:
-        raise HTTPException(
-            status_code=400, 
-            detail="Email and password are required for web authentication"
-        )
+        raise HTTPException(status_code=400, detail="Email and password are required for web authentication")
     
     try:
-        log.info(f"Performing web authentication for user: {email}")
+        logger.info(f"Performing web authentication for user: {email}")
         result = await authenticate_with_credentials(email, password, "web")
-        
+
+        web_session_dto = WebSessionDto(
+            php_session_id=result["auth_code"]
+        )
+        db_service.create_or_update_user(email, web_session_dto)
+
         if result["success"]:
             return {
                 "success": True,
@@ -220,59 +190,17 @@ async def authenticate_web_interface(
     except HTTPException:
         raise
     except Exception as e:
-        log.error(f"Web authentication error for {email}: {str(e)}")
+        logger.error(f"Web authentication error for {email}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Web authentication error: {str(e)}")
 
 
-@router.post("/api/2FA", tags=router_tag)
-async def pass_2fa_token(two_fa: int = Form(...)):
-    """Submit 2FA token during authentication flow."""
-    try:
-        await two_fa_queue.put(two_fa)
-        log.info(f"2FA token {two_fa} received and put in queue.")
-        return {"message": "2FA token received. Processing authentication."}
-    except Exception as e:
-        log.error(f"Error processing 2FA token: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Error processing 2FA token: {str(e)}")
-
-
-@router.get("/api/session/validate", tags=router_tag)
-async def validate_session(email: str = Query(...), auth_type: str = Query("web")):
-    """
-    Validate existing session without full authentication.
-    """
-    try:
-        # Use the new Peewee-based db_service to get the latest valid session
-        session = db_service.get_active_session_by_email_and_type(email, auth_type)
-        if not session:
-            return {
-                "valid": False,
-                "message": "No existing session found",
-                "requires_auth": True
-            }
-        # Prepare response with available session data
-        response = {
-            "valid": True,
-            "message": "Session is valid",
-            "requires_auth": False,
-            "session_data": {
-                "session_id": session.session_id,
-                "auth_type": session.auth_type,
-                "access_token": session.access_token,
-                "refresh_token": session.refresh_token,
-                "session_cookies": session.cookies_dict,
-                "navigation_urls": session.navigation_dict,
-                "noten_url": session.noten_url,
-                "authenticated_at": session.authenticated_at.isoformat() if session.authenticated_at else None,
-                "expires_at": session.expires_at.isoformat() if session.expires_at else None,
-                "is_active": session.is_active
-            }
-        }
-        return response
-    except Exception as e:
-        log.error(f"Session validation error: {e}")
-        return {
-            "valid": False,
-            "message": f"Session validation error: {str(e)}",
-            "requires_auth": True
-        }
+# @router.post("/api/2FA", tags=router_tag)
+# async def pass_2fa_token(two_fa: int = Form(...)):
+#     """Submit 2FA token during authentication flow."""
+#     try:
+#         await two_fa_queue.put(two_fa)
+#         logger.info(f"2FA token {two_fa} received and put in queue.")
+#         return {"message": "2FA token received. Processing authentication."}
+#     except Exception as e:
+#         logger.error(f"Error processing 2FA token: {e}", exc_info=True)
+#         raise HTTPException(status_code=500, detail=f"Error processing 2FA token: {str(e)}")

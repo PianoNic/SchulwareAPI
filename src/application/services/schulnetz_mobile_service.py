@@ -1,10 +1,8 @@
 import httpx
 from typing import Optional, Dict, Any
-from fastapi import logger
 from src.application.services.env_service import get_env_variable
 from src.application.services.token_service import token_service, ApplicationType
-
-log = logger.logger
+from fastapi.logger import logger
 
 class SchulnetzMobileService:
     def __init__(self):
@@ -30,7 +28,7 @@ class SchulnetzMobileService:
                 response.raise_for_status()
                 return response.json()
             except Exception as e:
-                log.error(f"Failed to get user info: {e}")
+                logger.error(f"Failed to get user info: {e}")
                 return None
     
     async def get_events(self, user_id: str, min_date: Optional[str] = None, 
@@ -60,7 +58,7 @@ class SchulnetzMobileService:
                 response.raise_for_status()
                 return response.json()
             except Exception as e:
-                log.error(f"Failed to get events: {e}")
+                logger.error(f"Failed to get events: {e}")
                 return None
     
     async def get_grades(self, user_id: str) -> Optional[Dict]:
@@ -82,7 +80,7 @@ class SchulnetzMobileService:
                 response.raise_for_status()
                 return response.json()
             except Exception as e:
-                log.error(f"Failed to get grades: {e}")
+                logger.error(f"Failed to get grades: {e}")
                 return None
     
     async def proxy_request(self, user_id: str, endpoint: str, method: str = "GET", 
@@ -112,7 +110,7 @@ class SchulnetzMobileService:
                 )
                 return response
             except Exception as e:
-                log.error(f"Failed to proxy mobile request: {e}")
+                logger.error(f"Failed to proxy mobile request: {e}")
                 return None
 
 # Global instance
