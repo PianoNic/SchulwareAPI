@@ -9,3 +9,8 @@ class MobileSessionDto:
 @dataclass
 class WebSessionDto:
     php_session_id: str
+    
+@dataclass
+class SessionDto:
+    mobile_session_dto: MobileSessionDto
+    web_session_dto: WebSessionDto

@@ -1,27 +1,19 @@
-from fastapi import APIRouter, Form, HTTPException, Query
+from fastapi import APIRouter, Form, HTTPException
 from fastapi.logger import logger
-from application.dtos.auth_dto import MobileSessionDto, WebSessionDto
-from application.services import db_service
+from src.application.dtos.auth_dto import MobileSessionDto, WebSessionDto
+from src.application.services import db_service
 from src.api.auth.auth import (
     authenticate_unified_webapp_flow,
     authenticate_unified_with_navigation_listener, 
-    authenticate_with_existing_session,
-    authenticate_with_credentials, 
-    two_fa_queue
+    authenticate_with_credentials
 )
-from src.application.services.token_service import token_service, ApplicationType
+from src.application.services.token_service import ApplicationType
 
 router = APIRouter()
 router_tag = ["Authorization"]
 
 @router.post("/api/authenticate/unified", tags=router_tag)
 async def authenticate_unified_api(email: str = Form(...), password: str = Form(...)):
-    """
-    Unified authentication endpoint that provides both mobile OAuth2 tokens 
-    and web session cookies in a single Microsoft login flow.
-    
-    This handles both schulnetz.bbbaden.ch and schulnetz.web.app redirect flows.
-    """
     if not email or not password:
         raise HTTPException(status_code=400, detail="Email and password are required")
     
@@ -63,12 +55,7 @@ async def authenticate_unified_api(email: str = Form(...), password: str = Form(
                     "navigation_urls": result["navigation_urls"],
                     "noten_url": result["noten_url"],
                     "auth_code": result["auth_code"]
-                },
-                # Metadata
-                "session_types": result["session_types"],
-                "authenticated_at": result["authenticated_at"],
-                "redirect_domain": result.get("redirect_domain", "unknown"),
-                "app_types": [ApplicationType.MOBILE_API, ApplicationType.WEB_INTERFACE]
+                }
             }
         else:
             raise HTTPException(
