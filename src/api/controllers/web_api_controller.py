@@ -12,25 +12,20 @@ router_tag = ["Web API"]
 
 @router.get("/api/web/unterricht", tags=router_tag)
 async def get_unterricht(url: str):
-    """Scrape Unterricht section"""
     return await scrape_unterricht(url)
 
 @router.get("/api/web/agenda", tags=router_tag)
 async def get_agenda(url: str):
-    """Scrape Agenda section"""
     return await scrape_agenda(url)
 
 @router.get("/api/web/listen", tags=router_tag)
 async def get_listen(url: str):
-    """Scrape Listen & Dokumente section"""
     return await scrape_listen(url)
 
 @router.get("/api/web/ausweis", tags=router_tag)
 async def get_ausweis(url: str):
-    """Scrape Ausweis section"""
     return await scrape_ausweis(url)
 
 @router.get("/api/web/noten", tags=router_tag)
 async def get_noten(url: str):
-    """Scrape Noten section"""
     return await scrape_noten(url)
