@@ -18,10 +18,3 @@ services:
     
     init: true  # Recommended to avoid zombie processes
     ipc: host   # Recommended for Chromium to avoid memory crashes
-    
-    healthcheck:
-      test: ["CMD", "python", "-c", "import httpx; r = httpx.get('http://localhost:8000/api/health'); exit(0 if r.status_code == 200 else 1)"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s

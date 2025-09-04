@@ -18,7 +18,7 @@ def setup_db():
     database.close()
     logger.info("Database connection closed.")
     
-def create_or_update_user(user_email: str, mobile_session_dto: MobileSessionDto, web_session_dto: WebSessionDto):
+def create_or_update_user(user_email: str, mobile_session_dto: MobileSessionDto = None, web_session_dto: WebSessionDto = None):
     if not user_email:
         raise ValueError("user_email cannot be null or empty.")
 
