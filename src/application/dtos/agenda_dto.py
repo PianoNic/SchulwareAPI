@@ -1,10 +1,8 @@
+from dataclasses import dataclass, field
 from typing import List, Optional
-from pydantic import BaseModel
 
-class Event(BaseModel):
-    """
-    Represents a single event in the agenda.
-    """
+@dataclass
+class AgendaDto:
     id: str
     startDate: str
     endDate: str
@@ -24,11 +22,11 @@ class Event(BaseModel):
     eventRoomStatus: Optional[str] = None
     timetableText: Optional[str] = None
     infoFacilityManagement: Optional[str] = None
-    importset: Optional[str] = None 
+    importset: Optional[str] = None
     lessons: Optional[str] = None
     publishToInfoSystem: Optional[str] = None
     studentNames: Optional[str] = None
     studentIds: Optional[str] = None
-    client: str
-    clientname: str
-    weight: Optional[int] = None
+    client: str = ""
+    clientname: str = ""
+    weight: Optional[str] = None
