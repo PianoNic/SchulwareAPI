@@ -406,7 +406,6 @@ async def get_web_session_cookies(email: str, password: str) -> Tuple[Optional[D
             for cookie in cookies:
                 # Store cookies as key-value pairs for easy use with httpx
                 session_cookies[cookie['name']] = cookie['value']
-                logger.info(f"Captured cookie: {cookie['name']} (domain: {cookie['domain']})")
 
             logger.info(f"Captured {len(session_cookies)} session cookies")
             
@@ -655,170 +654,6 @@ async def example_mobile_authenticated_request(email: str, password: str):
             logger.error(f"API request failed: {e}")
             return None
 
-async def authenticate_unified(email: str, password: str) -> Dict[str, Any]:
-    """
-    Unified authentication function that gets both web session cookies AND mobile OAuth2 tokens
-    in a single Microsoft login flow.
-    
-    Args:
-        email: Microsoft account email
-        password: Microsoft account password
-        
-    Returns:
-        Dictionary with both web session cookies and mobile OAuth2 tokens
-    """
-    logger.info("Starting unified authentication flow (web + mobile)...")
-
-    # Generate PKCE parameters for mobile OAuth2 flow
-    code_verifier, code_challenge = generate_pkce_challenge()
-    state = generate_random_string(32)
-    nonce = generate_random_string(32)
-    
-    logger.info("Generated OAuth2 parameters for mobile flow:")
-    logger.info(f"  Code Verifier: {code_verifier}")
-    logger.info(f"  Code Challenge: {code_challenge}")
-    logger.info(f"  State: {state}")
-    logger.info(f"  Nonce: {nonce}")
-
-    async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(headless=True)
-        context = await browser.new_context()
-        page = await context.new_page()
-
-        try:
-            # Step 1: Start with OAuth2 authorization URL (for mobile tokens)
-            auth_params = generate_auth_params(state, code_challenge, nonce)
-            auth_url = "https://schulnetz.bbbaden.ch/authorize.php?" + urlencode(auth_params)
-            
-            logger.info(f"Navigating to OAuth2 authorization URL: {auth_url}")
-            await page.goto(auth_url, wait_until='load', timeout=60000)
-
-            # Step 2: Handle Microsoft authentication
-            logger.info(f"Current URL after redirect: {page.url}")
-            if "login.microsoftonline.com" in page.url:
-                logger.info("Handling Microsoft authentication...")
-                await perform_microsoft_login(page, email, password)
-                await handle_post_login_flow(page)
-            else:
-                logger.warning("Expected Microsoft login redirect, but got different URL")
-
-            # Step 3: Wait for redirect back to schulnetz (either domain)
-            logger.info("Waiting for redirect back to schulnetz...")
-            
-            # Wait for either schulnetz.bbbaden.ch or schulnetz.web.app
-            try:
-                await page.wait_for_url("https://schulnetz.bbbaden.ch/*", timeout=15000)
-                logger.info("Redirected to schulnetz.bbbaden.ch domain")
-            except:
-                try:
-                    await page.wait_for_url("https://schulnetz.web.app/*", timeout=15000)
-                    logger.info("Redirected to schulnetz.web.app domain")
-                except:
-                    # If neither works, just check current URL
-                    logger.info("No expected redirect domain found, checking current URL...")
-            
-            current_url = page.url
-            logger.info(f"OAuth2 redirect URL: {current_url}")
-
-            # Step 4: Extract auth code for mobile OAuth2 flow
-            auth_code, received_state = extract_auth_code_from_url(current_url)
-            if not auth_code:
-                logger.error("No authorization code found in OAuth2 redirect URL")
-                return {
-                    "success": False, 
-                    "error": "Failed to obtain authorization code from OAuth2 flow"
-                }
-
-            logger.info(f"Successfully obtained OAuth2 auth code: {auth_code[:30]}...")
-            validate_state_parameter(state, received_state)
-
-            # Step 5: Extract session cookies from current browser context
-            cookies = await context.cookies()
-            session_cookies = {}
-            
-            for cookie in cookies:
-                session_cookies[cookie['name']] = cookie['value']
-                logger.info(f"Captured cookie: {cookie['name']} (domain: {cookie['domain']})")
-
-            logger.info(f"Captured {len(session_cookies)} session cookies")
-
-            # Step 6: Now navigate to establish web session (this will use existing Microsoft session)
-            logger.info("Establishing web interface session...")
-            
-            # Try to navigate to the main schulnetz domain for web session
-            try:
-                await page.goto("https://schulnetz.bbbaden.ch/", wait_until='load', timeout=30000)
-                logger.info("Successfully established web session on schulnetz.bbbaden.ch")
-                
-                # Update cookies after web session establishment
-                updated_cookies = await context.cookies()
-                for cookie in updated_cookies:
-                    if cookie['name'] not in session_cookies:
-                        session_cookies[cookie['name']] = cookie['value']
-                        logger.info(f"Added new web session cookie: {cookie['name']}")
-
-                # Step 7: Extract navigation URLs from the web interface
-                try:
-                    current_html = await page.content()
-                    navigation_urls = extract_navigation_urls(current_html)
-                    noten_url = navigation_urls.get("Noten")
-                    logger.info(f"Extracted {len(navigation_urls)} navigation URLs")
-                except Exception as e:
-                    logger.warning(f"Could not extract navigation URLs: {e}")
-                    navigation_urls = {}
-                    noten_url = None
-                    
-            except Exception as e:
-                logger.warning(f"Could not establish web session on schulnetz.bbbaden.ch: {e}")
-                # Still proceed with the mobile tokens, web session will be limited
-                navigation_urls = {}
-                noten_url = None
-
-        except Exception as e:
-            logger.error(f"Error during unified authentication flow: {e}")
-            return {
-                "success": False, 
-                "error": f"Unified authentication failed: {str(e)}"
-            }
-        finally:
-            await browser.close()
-
-    # Step 8: Exchange auth code for OAuth2 tokens (outside browser context)
-    try:
-        logger.info("Exchanging authorization code for OAuth2 tokens...")
-        access_token, refresh_token = await exchange_code_for_tokens(auth_code, code_verifier)
-        
-        if not access_token:
-            return {
-                "success": False, 
-                "error": "Failed to exchange authorization code for OAuth2 tokens"
-            }
-
-        logger.info(f"Successfully obtained access token: {access_token[:30]}...")
-
-    except Exception as e:
-        logger.error(f"Token exchange failed: {e}")
-        return {
-            "success": False, 
-            "error": f"Token exchange failed: {str(e)}"
-        }
-
-    return {
-        "success": True,
-        "message": "Unified authentication completed successfully",
-        # Mobile OAuth2 data
-        "access_token": access_token,
-        "refresh_token": refresh_token,
-        # Web session data
-        "session_cookies": session_cookies,
-        "auth_code": auth_code,
-        "navigation_urls": navigation_urls,
-        "noten_url": noten_url,
-        # Metadata
-        "session_types": ["mobile", "web"],
-        "authenticated_at": str(datetime.now())
-    }
-
 async def authenticate_unified_webapp_flow(email: str, password: str) -> Dict[str, Any]:
     """
     Alternative unified authentication that properly handles the schulnetz.web.app redirect flow.
@@ -1010,7 +845,7 @@ async def authenticate_unified_webapp_flow(email: str, password: str) -> Dict[st
         "redirect_domain": redirect_domain or "unknown"
     }
 
-async def authenticate_unified_with_navigation_listener(email: str, password: str) -> Dict[str, Any]:
+async def authenticate_unified(email: str, password: str) -> Dict[str, Any]:
     """
     Unified authentication using navigation listener to capture auth code during redirects.
     
@@ -1051,7 +886,7 @@ async def authenticate_unified_with_navigation_listener(email: str, password: st
                 return
                 
             url = frame.url
-            logger.info(f"Frame navigated to: {url}")
+            # logger.info(f"Frame navigated to: {url}")
             
             # Check if this URL contains the auth code
             if "code=" in url and ("schulnetz" in url):
@@ -1111,7 +946,7 @@ async def authenticate_unified_with_navigation_listener(email: str, password: st
             
             for cookie in cookies:
                 session_cookies[cookie['name']] = cookie['value']
-                logger.info(f"Captured cookie: {cookie['name']} (domain: {cookie['domain']})")
+                # logger.info(f"Captured cookie: {cookie['name']} (domain: {cookie['domain']})")
 
             # Step 5: Try to establish web session
             navigation_urls = {}
@@ -1252,43 +1087,30 @@ def extract_navigation_urls(html_content: str) -> dict:
     try:
         soup = BeautifulSoup(html_content, 'html.parser')
         navigation_urls = {}
-        
-        # Find the main navigation menu
-        nav_menu = soup.find('nav', {'class': 'mdl-navigation', 'id': 'nav-main-menu'})
-        
+        # Find the main navigation menu by id
+        nav_menu = soup.find('nav', {'id': 'nav-main-menu'})
         if not nav_menu:
             logger.warning("Could not find main navigation menu in HTML")
             return navigation_urls
-        
-        # Find all navigation links
-        nav_links = nav_menu.find_all('a', {'class': 'mdl-navigation__link'})
-        
+
+        # Find all <a> elements inside the navigation menu
+        nav_links = nav_menu.find_all('a', class_='mdl-navigation__link')
         for link in nav_links:
-            try:
-                # Get the href attribute
-                href = link.get('href', '')
-                
-                # Find the menu title
-                title_div = link.find('div', {'class': 'cls-page--mainmenu-subtitle'})
-                if title_div:
-                    menu_name = title_div.get_text(strip=True)
-                    
-                    # Convert relative URL to absolute URL if needed
-                    if href.startswith('index.php'):
-                        full_url = f"https://schulnetz.bbbaden.ch/{href}"
-                    else:
-                        full_url = href
-                    
-                    navigation_urls[menu_name] = full_url
-                    logger.info(f"Extracted navigation link: {menu_name} -> {href}")
-                
-            except Exception as e:
-                logger.warning(f"Error processing navigation link: {e}")
-                continue
-        
+            href = link.get('href', '')
+            # Try to get the menu name from the subtitle div
+            title_div = link.find('div', class_='cls-page--mainmenu-subtitle')
+            if title_div:
+                menu_name = title_div.get_text(strip=True)
+            else:
+                # Fallback: use aria-label or text
+                menu_name = link.get('aria-label', link.text.strip())
+            # Only use the relative URL (do not prepend domain)
+            navigation_urls[menu_name] = href
+            logger.info(f"Extracted navigation link: {menu_name} -> {href}")
+
         logger.info(f"Successfully extracted {len(navigation_urls)} navigation URLs")
         return navigation_urls
-        
+
     except Exception as e:
         logger.error(f"Error parsing HTML for navigation URLs: {e}")
         return {}
