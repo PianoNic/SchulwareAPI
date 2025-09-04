@@ -1,5 +1,6 @@
 from fastapi import HTTPException
 from fastapi.logger import logger
+from src.application.dtos.web.web_urls_dto import WebUrlsDto
 from src.application.services import db_service
 from src.application.dtos.auth_dto import MobileSessionDto, WebSessionDto
 from src.api.auth import auth
@@ -12,7 +13,7 @@ async def authenticate_unified_command_async(email: str, password: str):
         logger.info(f"Performing unified authentication for user: {email}")
         
         # Try the navigation listener approach first
-        result = await auth.authenticate_unified_with_navigation_listener(email, password)
+        result = await auth.authenticate_unified(email, password)
         
         # If that fails, try the response listener approach
         if not result["success"]:
@@ -28,7 +29,16 @@ async def authenticate_unified_command_async(email: str, password: str):
             web_session_dto = WebSessionDto(
                 php_session_id=result["auth_code"],
             )
-            db_service.create_or_update_user(email, mobile_session_dto=mobile_session_dto, web_session_dto=web_session_dto)
+            web_url_dto = WebUrlsDto(
+                absent_notices=result["navigation_urls"]["Absenzen"],
+                agenda=result["navigation_urls"]["Agenda"],
+                documents=result["navigation_urls"]["Listen&Dokumente"],
+                grades=result["navigation_urls"]["Noten"],
+                lesson=result["navigation_urls"]["Unterricht"],
+                start=result["navigation_urls"]["Start"],
+                student_id_card=result["navigation_urls"]["Ausweis"]
+            )
+            db_service.create_or_update_user(email, mobile_session_dto=mobile_session_dto, web_session_dto=web_session_dto, web_url_dto=web_url_dto)
             return {
                 "success": True,
                 "message": "Unified authentication successful",
