@@ -1,5 +1,4 @@
-from fastapi import APIRouter, Query, HTTPException
-from typing import List, Optional
+from fastapi import APIRouter
 from src.application.services.schulnetz_web_scrapers.unterricht_scraper import scrape_unterricht
 from src.application.services.schulnetz_web_scrapers.agenda_scraper import scrape_agenda
 from src.application.services.schulnetz_web_scrapers.listen_scraper import scrape_listen

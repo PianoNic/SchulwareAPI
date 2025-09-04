@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from typing import Optional, List
-from src.application.dtos.class_info_dto import ClassInfoDto
+from src.application.dtos.mobile.class_info_dto import ClassInfoDto
 
 @dataclass
 class UserInfoDto:

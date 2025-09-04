@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from typing import Optional, Any
-from src.application.dtos.examination_groups_dto import ExaminationGroupsDto
+from src.application.dtos.mobile.examination_groups_dto import ExaminationGroupsDto
 
 @dataclass
 class GradeDto:
