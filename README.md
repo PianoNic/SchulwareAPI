@@ -35,7 +35,7 @@ Schulnetz systems.
 
 ### Access the API
 API will be live at:
-- **Interactive Docs**: [http://localhost:8000/](http://localhost:8000/)
+- **Swagger Docs**: [http://localhost:8000/](http://localhost:8000/)
 
 ## 📜 License
 This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
