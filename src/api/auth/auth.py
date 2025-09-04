@@ -655,16 +655,6 @@ async def example_mobile_authenticated_request(email: str, password: str):
             return None
 
 async def authenticate_unified(email: str, password: str) -> Dict[str, Any]:
-    """
-    Unified authentication using navigation listener to capture auth code during redirects.
-    
-    Args:
-        email: Microsoft account email
-        password: Microsoft account password
-        
-    Returns:
-        Dictionary with both web session cookies and mobile OAuth2 tokens
-    """
     logger.info("Starting unified authentication with navigation listener...")
 
     # Generate PKCE parameters for mobile OAuth2 flow
@@ -732,13 +722,6 @@ async def authenticate_unified(email: str, password: str) -> Dict[str, Any]:
                 if auth_code:
                     break
                 await asyncio.sleep(0.5)
-            
-            # Also check the current URL as backup
-            if not auth_code:
-                current_url = page.url
-                logger.info(f"Checking current URL for auth code: {current_url}")
-                auth_code, received_state = extract_auth_code_from_url(current_url)
-                redirect_domain = "schulnetz.web.app" if "web.app" in current_url else "schulnetz.bbbaden.ch"
 
             if not auth_code:
                 return {
@@ -749,32 +732,42 @@ async def authenticate_unified(email: str, password: str) -> Dict[str, Any]:
             logger.info(f"Successfully obtained auth code: {auth_code[:30]}...")
             validate_state_parameter(state, received_state)
 
-            # Step 4: Extract session cookies
-            cookies = await context.cookies()
-            session_cookies = {}
+            # # Step 4: Extract session cookies
+            # cookies = await context.cookies()
+            # session_cookies = {}
             
-            for cookie in cookies:
-                session_cookies[cookie['name']] = cookie['value']
-                # logger.info(f"Captured cookie: {cookie['name']} (domain: {cookie['domain']})")
+            # for cookie in cookies:
+            #     session_cookies[cookie['name']] = cookie['value']
+            #     # logger.info(f"Captured cookie: {cookie['name']} (domain: {cookie['domain']})")
+
+            # Step 6: Exchange for tokens
+            try:
+                access_token, refresh_token = await exchange_code_for_tokens(auth_code, code_verifier)
+                
+                if not access_token:
+                    return {"success": False, "error": "Token exchange failed"}
+
+            except Exception as e:
+                logger.error(f"Token exchange error: {e}")
+                return {"success": False, "error": f"Token exchange failed: {str(e)}"}
+
 
             # Step 5: Try to establish web session
             navigation_urls = {}
-            noten_url = None
-            
+
             try:
                 await page.goto("https://schulnetz.bbbaden.ch/", wait_until='load', timeout=30000)
                 
                 if "login.microsoftonline.com" not in page.url:
                     # Update cookies
                     updated_cookies = await context.cookies()
-                    for cookie in updated_cookies:
-                        if cookie['name'] not in session_cookies:
-                            session_cookies[cookie['name']] = cookie['value']
+                    # for cookie in updated_cookies:
+                    #     if cookie['name'] not in session_cookies:
+                    #         session_cookies[cookie['name']] = cookie['value']
 
                     # Extract navigation
                     current_html = await page.content()
                     navigation_urls = extract_navigation_urls(current_html)
-                    noten_url = navigation_urls.get("Noten")
                     
             except Exception as e:
                 logger.warning(f"Could not establish web session: {e}")
@@ -785,27 +778,14 @@ async def authenticate_unified(email: str, password: str) -> Dict[str, Any]:
         finally:
             await browser.close()
 
-    # Step 6: Exchange for tokens
-    try:
-        access_token, refresh_token = await exchange_code_for_tokens(auth_code, code_verifier)
-        
-        if not access_token:
-            return {"success": False, "error": "Token exchange failed"}
-        # Do NOT return here! Let it continue to the DB save code below.
-
-    except Exception as e:
-        logger.error(f"Token exchange error: {e}")
-        return {"success": False, "error": f"Token exchange failed: {str(e)}"}
-
     return {
         "success": True,
         "message": "Unified authentication completed successfully",
         "access_token": access_token,
         "refresh_token": refresh_token,
-        "session_cookies": session_cookies,
+        "session_cookies": updated_cookies,
         "auth_code": auth_code,
         "navigation_urls": navigation_urls,
-        "noten_url": noten_url,
         "session_types": ["mobile", "web"],
         "authenticated_at": str(datetime.now()),
         "redirect_domain": redirect_domain or "unknown"
@@ -840,17 +820,14 @@ async def authenticate_with_existing_session(session_cookies: Dict[str, str], au
                     # Extract navigation URLs if requested
                     if auth_type == "unified":
                         navigation_urls = extract_navigation_urls(response.text)
-                        noten_url = navigation_urls.get("Noten")
                     else:
                         navigation_urls = {}
-                        noten_url = None
                     
                     return {
                         "success": True,
                         "message": "Existing web session is valid",
                         "session_cookies": session_cookies,
                         "navigation_urls": navigation_urls,
-                        "noten_url": noten_url,
                         "session_type": auth_type,
                         "source": "existing_session",
                     }

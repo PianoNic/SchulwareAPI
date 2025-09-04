@@ -14,12 +14,7 @@ async def authenticate_unified_command_async(email: str, password: str):
         
         # Try the navigation listener approach first
         result = await auth.authenticate_unified(email, password)
-        
-        # If that fails, try the response listener approach
-        if not result["success"]:
-            logger.info("Navigation listener approach failed, trying response listener...")
-            result = await auth.authenticate_unified_webapp_flow(email, password)
-        
+
         if result["success"]:
             mobile_session_dto = MobileSessionDto(
                 access_token=result["access_token"],
@@ -53,7 +48,6 @@ async def authenticate_unified_command_async(email: str, password: str):
                 "web": {
                     "session_cookies": result["session_cookies"],
                     "navigation_urls": result["navigation_urls"],
-                    "noten_url": result["noten_url"],
                     "auth_code": result["auth_code"]
                 }
             }

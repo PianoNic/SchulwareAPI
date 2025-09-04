@@ -23,7 +23,6 @@ async def authenticate_web_command_async(email: str, password: str):
                 "message": "Web interface authentication successful",
                 "session_cookies": result["session_cookies"],
                 "navigation_urls": result.get("navigation_urls", {}),
-                "noten_url": result.get("noten_url"),
                 "auth_code": result.get("auth_code"),
             }
         else:
