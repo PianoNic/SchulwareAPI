@@ -13,12 +13,12 @@ class GradeDto:
     title: str
     date: str
     mark: str
-    points: Optional[Any]
+    points: Optional[str]
     weight: str
     isConfirmed: bool
     courseGrade: str
     examinationGroups: ExaminationGroupsDto
-    studentId: Optional[Any]
-    studentName: Optional[Any]
+    studentId: Optional[str]
+    studentName: Optional[str]
     inputType: str
-    comment: Optional[Any]
+    comment: Optional[str]

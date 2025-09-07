@@ -3,6 +3,6 @@ from typing import Any, Optional
 
 @dataclass
 class ExaminationGroupsDto:
-    examGroup: Optional[Any]
-    weightExamGroup: Optional[Any]
-    averageExamGroup: Optional[Any]
+    examGroup: Optional[str]
+    weightExamGroup: Optional[str]
+    averageExamGroup: Optional[str]
