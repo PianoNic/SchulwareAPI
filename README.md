@@ -27,12 +27,6 @@ This API has been tested on:
 
 Schulnetz systems.
 
-## 🚀 Installation
-
-### Prerequisites
-- Python 3.15+
-- Docker (optional)
-
 ### Access the API
 API will be live at:
 - **Swagger Docs**: [http://localhost:8000/](http://localhost:8000/)
