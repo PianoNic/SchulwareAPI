@@ -9,12 +9,9 @@ services:
       - PYTHONUNBUFFERED=1
       - SCHULNETZ_API_BASE_URL=${SCHULNETZ_API_BASE_URL}
       - SCHULNETZ_WEB_BASE_URL=${SCHULNETZ_WEB_BASE_URL}
-      - SCHULNETZ_API_KEY=${SCHULNETZ_API_KEY}
       - SCHULNETZ_CLIENT_ID=${SCHULNETZ_CLIENT_ID}
-      - REDIRECT_URI=${REDIRECT_URI}
     env_file:
       - .env
     restart: unless-stopped
-    
     init: true  # Recommended to avoid zombie processes
     ipc: host   # Recommended for Chromium to avoid memory crashes
