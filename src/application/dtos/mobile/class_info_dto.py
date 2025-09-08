@@ -1,7 +1,6 @@
-from dataclasses import dataclass
+from pydantic import BaseModel
 
-@dataclass
-class ClassInfoDto:
+class ClassInfoDto(BaseModel):
     id: str
     token: str
     semester: str

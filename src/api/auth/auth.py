@@ -212,7 +212,7 @@ async def get_microsoft_redirect_code(email: str, password: str, state: str, cod
     logger.info(f"Navigating to {auth_url}...")
 
     async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(headless=True)
+        browser = await playwright.chromium.launch(headless=False)
         page = await browser.new_page()
 
         try:
@@ -366,7 +366,7 @@ async def get_web_session_cookies(email: str, password: str) -> Tuple[Optional[D
     logger.info("Starting web authentication flow...")
 
     async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(headless=True)
+        browser = await playwright.chromium.launch(headless=False)
         context = await browser.new_context()
         page = await context.new_page()
 
@@ -679,7 +679,7 @@ async def authenticate_unified_webapp_flow(email: str, password: str) -> Dict[st
     logger.info(f"  Nonce: {nonce}")
 
     async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(headless=True)
+        browser = await playwright.chromium.launch(headless=False)
         context = await browser.new_context()
         page = await context.new_page()
 
@@ -870,7 +870,7 @@ async def authenticate_unified(email: str, password: str) -> Dict[str, Any]:
     logger.info(f"  Nonce: {nonce}")
 
     async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(headless=True)
+        browser = await playwright.chromium.launch(headless=False)
         context = await browser.new_context()
         page = await context.new_page()
 

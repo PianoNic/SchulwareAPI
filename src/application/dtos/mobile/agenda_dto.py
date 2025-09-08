@@ -1,8 +1,7 @@
-from dataclasses import dataclass
 from typing import List, Optional
+from pydantic import BaseModel
 
-@dataclass
-class AgendaDto:
+class AgendaDto(BaseModel):
     id: str
     startDate: str
     endDate: str

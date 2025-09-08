@@ -1,6 +1,5 @@
-from dataclasses import dataclass
+from pydantic import BaseModel
 
-@dataclass
-class SettingDto:
+class SettingDto(BaseModel):
     key: str
     value: str

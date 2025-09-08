@@ -1,8 +1,7 @@
-from dataclasses import dataclass
 from typing import Optional
+from pydantic import BaseModel
 
-@dataclass
-class AbsenceNoticeStatusDto:
+class AbsenceNoticeStatusDto(BaseModel):
     id: str
     code: str
     name: str
