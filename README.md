@@ -23,13 +23,48 @@ SchulwareAPI is a unified API designed for Schulnetz systems, simplifying data a
 ## 🛠️ Compatibility
 This API has been tested on:
 - bbbaden
-- ~kanti baden~ (Still implementig php scraper)
+- ~kanti baden~ (Still implementing php scraper)
 
 Schulnetz systems.
 
 ### Access the API
 API will be live at:
 - **Swagger Docs**: [http://localhost:8000/](http://localhost:8000/)
+
+## 🐳 Docker & Container Registry Usage
+
+You can run SchulwareAPI easily using Docker or pull prebuilt images from public registries.
+
+### Docker Compose
+
+You can also use the provided `compose.yml` for local development or deployment. Make sure to set up your `.env` file with the required environment variables.
+
+```sh
+docker compose up -d
+```
+
+### Option 2: Run with Docker Compose
+**1. Create a `compose.yml` file:**  
+Use your favorite editor to create a `compose.yml` file and paste this into it:
+```yaml
+services:
+  schulware-api:
+    image: pianonic/schulwareapi:latest # Uses the image from Docker Hub
+    # image: ghcr.io/pianonic/schulwareapi:latest # Uses the image from GitHub Container Registry
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    restart: unless-stopped
+    init: true  # Recommended to avoid zombie processes
+    ipc: host   # Recommended for Chromium to avoid memory crashes
+```
+
+**2. Start it:**
+```bash
+docker compose up -d
+```
+The API will be available at [http://localhost:8000](http://localhost:8000).
 
 ## 📜 License
 This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
