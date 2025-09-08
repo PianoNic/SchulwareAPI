@@ -23,7 +23,7 @@ SchulwareAPI is a unified API designed for Schulnetz systems, simplifying data a
 ## 🛠️ Compatibility
 This API has been tested on:
 - bbbaden
-- ~kanti baden~ (Still investigating)
+- ~kanti baden~ (Still implementig php scraper)
 
 Schulnetz systems.
 
