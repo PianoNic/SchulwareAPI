@@ -1,32 +1,31 @@
-from dataclasses import dataclass
 from typing import Optional, List
+from pydantic import BaseModel
 
-@dataclass
-class ExamDto:
+class ExamDto(BaseModel):
     id: str
     startDate: str
     endDate: str
     text: str
-    comment: Optional[str]
+    comment: Optional[str] = None
     roomToken: str
-    roomId: Optional[str]
-    teachers: Optional[List[str]]
-    teacherIds: Optional[List[str]]
-    teacherTokens: Optional[List[str]]
+    roomId: Optional[str] = None
+    teachers: Optional[List[str]] = None
+    teacherIds: Optional[List[str]] = None
+    teacherTokens: Optional[List[str]] = None
     courseId: str
     courseToken: str
     courseName: str
-    status: Optional[str]
+    status: Optional[str] = None
     color: str
     eventType: str
-    eventRoomStatus: Optional[str]
-    timetableText: Optional[str]
-    infoFacilityManagement: Optional[str]
-    importset: Optional[str]
-    lessons: Optional[List[str]]
-    publishToInfoSystem: Optional[bool]
-    studentNames: Optional[List[str]]
-    studentIds: Optional[List[str]]
+    eventRoomStatus: Optional[str] = None
+    timetableText: Optional[str] = None
+    infoFacilityManagement: Optional[str] = None
+    importset: Optional[str] = None
+    lessons: Optional[List[str]] = None
+    publishToInfoSystem: Optional[bool] = None
+    studentNames: Optional[List[str]] = None
+    studentIds: Optional[List[str]] = None
     client: str
     clientname: str
     weight: str

@@ -1,9 +1,8 @@
-from dataclasses import dataclass
-from typing import Optional, Any
+from typing import Optional
+from pydantic import BaseModel
 from src.application.dtos.mobile.examination_groups_dto import ExaminationGroupsDto
 
-@dataclass
-class GradeDto:
+class GradeDto(BaseModel):
     id: str
     course: str
     courseId: str
@@ -13,12 +12,12 @@ class GradeDto:
     title: str
     date: str
     mark: str
-    points: Optional[str]
+    points: Optional[str] = None
     weight: str
     isConfirmed: bool
     courseGrade: str
     examinationGroups: ExaminationGroupsDto
-    studentId: Optional[str]
-    studentName: Optional[str]
+    studentId: Optional[str] = None
+    studentName: Optional[str] = None
     inputType: str
-    comment: Optional[str]
+    comment: Optional[str] = None

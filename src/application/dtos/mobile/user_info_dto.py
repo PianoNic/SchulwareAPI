@@ -1,9 +1,8 @@
-from dataclasses import dataclass, field
 from typing import Optional, List
+from pydantic import BaseModel, Field
 from src.application.dtos.mobile.class_info_dto import ClassInfoDto
 
-@dataclass
-class UserInfoDto:
+class UserInfoDto(BaseModel):
     id: str
     userType: str
     idNr: str
@@ -13,8 +12,8 @@ class UserInfoDto:
     gender: str
     birthday: str
     street: str
-    addressLine2: Optional[str]
-    postOfficeBox: Optional[str]
+    addressLine2: Optional[str] = None
+    postOfficeBox: Optional[str] = None
     zip: str
     city: str
     nationality: str
@@ -27,6 +26,6 @@ class UserInfoDto:
     profil2: str
     entryDate: str
     exitDate: str
-    regularClasses: List[ClassInfoDto] = field(default_factory=list)
-    additionalClasses: List[ClassInfoDto] = field(default_factory=list)
+    regularClasses: List[ClassInfoDto] = Field(default_factory=list)
+    additionalClasses: List[ClassInfoDto] = Field(default_factory=list)
 

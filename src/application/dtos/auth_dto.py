@@ -1,16 +1,13 @@
-from dataclasses import dataclass
+from pydantic import BaseModel
 
-@dataclass
-class MobileSessionDto:
+class MobileSessionDto(BaseModel):
     access_token: str
     refresh_token: str
-    expires_in: str
+    expires_in: int
 
-@dataclass
-class WebSessionDto:
+class WebSessionDto(BaseModel):
     php_session_id: str
-    
-@dataclass
-class SessionDto:
+
+class SessionDto(BaseModel):
     mobile_session_dto: MobileSessionDto
     web_session_dto: WebSessionDto

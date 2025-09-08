@@ -1,5 +1,4 @@
-from dataclasses import dataclass
+from pydantic import BaseModel
 
-@dataclass
-class StudentIdCardDto:
+class StudentIdCardDto(BaseModel):
     html: str
