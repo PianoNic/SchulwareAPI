@@ -8,3 +8,4 @@ colorlog
 beautifulsoup4
 peewee
 pyjwt
+slowapi
