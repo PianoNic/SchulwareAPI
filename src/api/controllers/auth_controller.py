@@ -30,4 +30,4 @@ async def authenticate_web_interface(request: Request, email: str = Form(...), p
 #         return {"message": "2FA token received. Processing authentication."}
 #     except Exception as e:
 #         logger.error(f"Error processing 2FA token: {e}", exc_info=True)
-#         raise HTTPException(status_code=500, detail=f"Error processing 2FA token: {str(e)}")
+#         raise HTTPException(status_code=500, detail=f"Error processing 2FA token: {str(e)}") 
