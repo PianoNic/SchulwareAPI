@@ -70,5 +70,6 @@ async def get_mobile_cockpit_report(report_id: int, token: str = Depends(get_cur
     html_content = response.body.decode("utf-8")
     if html_content.startswith('"') and html_content.endswith('"'):
         html_content = html_content[1:-1]
-    html_content = html_content.encode('utf-8').decode('unicode_escape')
+    html_content = html_content.replace('\\r\\n', '').replace('\\r', '').replace('\\n', '')
+    html_content = html_content.replace('\\"', '"')
     return StudentIdCardDto(html=html_content)
