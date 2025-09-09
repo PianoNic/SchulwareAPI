@@ -1,4 +1,3 @@
-
 import json
 from typing import List, Optional
 from fastapi import HTTPException, Response
@@ -8,7 +7,8 @@ from src.application.services.env_service import get_env_variable
 
 async def proxy_mobile_rest_query_async(token: str, target_url_path: str, method: str, query_params: Optional[List[tuple]] = None):
     target_url_path = f"/rest/v1/{target_url_path.lstrip('/')}"
-    target_url = f"{get_env_variable("SCHULNETZ_API_BASE_URL")}{target_url_path}"
+    base_url = get_env_variable("SCHULNETZ_API_BASE_URL")
+    target_url = f"{base_url}{target_url_path}"
 
     request_headers = {
         "Referer": "https://schulnetz.web.app/",

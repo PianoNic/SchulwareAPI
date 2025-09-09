@@ -1,8 +1,11 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+from slowapi.errors import RateLimitExceeded
 from src.application.services.db_service import setup_db
 from src.application.services.env_service import load_env
 from src.api.router_registry import router_registry
 from src.infrastructure.logging_config import setup_colored_logging
+
 setup_colored_logging()
 
 load_env()
