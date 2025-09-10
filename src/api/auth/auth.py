@@ -1,4 +1,5 @@
 import asyncio
+import time
 from datetime import datetime
 from bs4 import BeautifulSoup
 import httpx
@@ -242,11 +243,21 @@ async def get_microsoft_redirect_code(email: str, password: str, state: str, cod
     auth_url = "https://schulnetz.bbbaden.ch/authorize.php?" + urlencode(auth_params)
     
     logger.info(f"Starting Microsoft authentication flow...")
-    logger.info(f"Navigating to {auth_url}...")
 
     async with async_playwright() as playwright:
         browser = await playwright.chromium.launch(headless=True)
         page = await browser.new_page()
+
+        # Track all URLs visited during the authentication flow
+        visited_urls = []
+        
+        def track_navigation(frame):
+            url = frame.url
+            visited_urls.append(url)
+            if "microsoft" not in url.lower():
+                logger.info(f"Navigation: {url}")
+        
+        page.on("framenavigated", track_navigation)
 
         try:
             # Navigate to the authorization URL which will redirect to Microsoft
@@ -260,29 +271,22 @@ async def get_microsoft_redirect_code(email: str, password: str, state: str, cod
                 logger.info(f"Page content (partial): {(await page.content())[:1000]}")
                 return None, None
 
-            # Handle the interactive Microsoft login
-            logger.info("Starting interactive Microsoft login...")
+            # Handle the interactive Microsoft login and post-login flow
+            logger.info("Processing Microsoft login and post-login steps...")
             await perform_microsoft_login(page, email, password)
-            
-            # Handle any post-login flow (2FA, security updates, etc.)
             await handle_post_login_flow(page)
 
-            # Extract authorization code from the final URL
-            logger.info(f"After Microsoft login flow, current URL: {page.url}")
-            auth_code, received_state = extract_auth_code_from_url(page.url)
+            # Search through all visited URLs to find one with authorization code
+            auth_code, received_state = None, None
+            
+            for url in visited_urls:
+                if 'code=' in url:
+                    auth_code, received_state = extract_auth_code_from_url(url)
+                    if auth_code:
+                        break
             
             if not auth_code:
-                logger.info("No auth code found immediately, waiting for additional redirects...")
-                await asyncio.sleep(5)
-                current_url = page.url
-                logger.info(f"After additional wait, current URL: {current_url}")
-                auth_code, received_state = extract_auth_code_from_url(current_url)
-            
-            if auth_code:
-                logger.info(f"Successfully obtained Authorization Code: {auth_code[:30]}...")
-                logger.info(f"Received State: {received_state}")
-            else:
-                logger.warning("No authorization code found after Microsoft authentication")
+                logger.warning(f"No auth code found in {len(visited_urls)} visited URLs. Final: {page.url}")
                 
             return auth_code, received_state
 
@@ -335,7 +339,7 @@ async def exchange_code_for_tokens(auth_code: str, code_verifier: str) -> Tuple[
         "sec-ch-ua-platform": '"Windows"',
     }
 
-    logger.info(f"Exchanging authorization code for tokens at {token_url}...")
+    logger.info("Exchanging authorization code for tokens...")
     
     try:
         token_response = await httpx_client.post(
@@ -344,18 +348,14 @@ async def exchange_code_for_tokens(auth_code: str, code_verifier: str) -> Tuple[
         token_response.raise_for_status()
         token_json = token_response.json()
 
-        logger.info("Token Exchange Successful!")
-        logger.info("Received Token Data:")
-        logger.info(token_json)
-
         access_token = token_json.get("access_token")
         refresh_token = token_json.get("refresh_token")
         
         if access_token:
-            logger.info(f"Access Token obtained: {access_token[:30]}...")
+            logger.info("Token exchange successful")
             return access_token, refresh_token
         else:
-            logger.error("Access token not found in response.")
+            logger.error("Access token not found in response")
             return None, None
 
     except httpx.RequestError as e:
@@ -582,16 +582,15 @@ async def authenticate_with_credentials(email: str, password: str, auth_type: st
     elif auth_type == "mobile":
         # Original OAuth2 mobile flow
         try:
+            # Start benchmark timer
+            start_time = time.time()
+            
             # Generate PKCE parameters and state/nonce
             code_verifier, code_challenge = generate_pkce_challenge()
             state = generate_random_string(32)
             nonce = generate_random_string(32)
             
-            logger.info("Generated OAuth2 parameters:")
-            logger.info(f"  Code Verifier: {code_verifier}")
-            logger.info(f"  Code Challenge: {code_challenge}")
-            logger.info(f"  State: {state}")
-            logger.info(f"  Nonce: {nonce}")
+            logger.info("Starting OAuth2 flow with generated parameters")
 
             # Step 1: Get authorization code from Microsoft
             auth_code, received_state = await get_microsoft_redirect_code(
@@ -613,6 +612,11 @@ async def authenticate_with_credentials(email: str, password: str, auth_type: st
 
             # Step 3: Exchange authorization code for tokens
             access_token, refresh_token = await exchange_code_for_tokens(auth_code, code_verifier)
+
+            # Calculate and log benchmark results
+            end_time = time.time()
+            duration = end_time - start_time
+            logger.info(f"Complete OAuth2 flow finished in {duration:.2f}s")
 
             if access_token:
                 return {
