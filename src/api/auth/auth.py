@@ -111,39 +111,62 @@ async def handle_post_login_flow(page: Page) -> None:
             'stay_signed_in': '#idSIButton9'
         }
         
-        # Wait for any of these elements to appear (short timeout)
+        # Check which elements are immediately visible (no waiting)
+        found_element = None
+        found_step = None
+        
         for step_name, selector in selectors.items():
             try:
                 element = page.locator(selector)
-                await element.wait_for(state="visible", timeout=1000)
-                logger.info(f"Found: {step_name}")
-                
-                # Handle each step
-                if step_name == 'account_protection':
-                    await element.click()
-                    await determine_and_handle_next_step()  # Recursively check next step
-                    return
-                elif step_name == 'authenticator_code':
-                    await handle_authenticator_code_display()
-                    await determine_and_handle_next_step()  # Check for next step
-                    return
-                elif step_name == 'two_fa_input':
-                    await handle_2fa_input(page)
-                    await determine_and_handle_next_step()  # Check for next step
-                    return
-                elif step_name == 'security_info_update':
-                    await handle_security_info_update(page)
-                    await determine_and_handle_next_step()  # Check for next step
-                    return
-                elif step_name == 'stay_signed_in':
-                    await handle_stay_signed_in(page)
-                    return  # This should be the final step
-                    
+                if await element.is_visible(timeout=100):  # Very short timeout - just check if visible now
+                    found_element = element
+                    found_step = step_name
+                    logger.info(f"Found: {step_name}")
+                    break
             except Exception:
                 continue  # Element not found, try next
         
-        # If none of the expected elements are found, we might be done or on an unexpected page
-        logger.info("No expected post-login elements found - login may be complete")
+        if not found_element:
+            # If nothing is immediately visible, wait a bit for page to load and try once more
+            logger.info("No elements immediately visible, waiting for page to load...")
+            await page.wait_for_load_state('domcontentloaded', timeout=3000)
+            
+            # Try again with slightly longer timeout
+            for step_name, selector in selectors.items():
+                try:
+                    element = page.locator(selector)
+                    if await element.is_visible(timeout=500):
+                        found_element = element
+                        found_step = step_name
+                        logger.info(f"Found after wait: {step_name}")
+                        break
+                except Exception:
+                    continue
+        
+        # Handle the found element
+        if found_element and found_step:
+            if found_step == 'account_protection':
+                await found_element.click()
+                await determine_and_handle_next_step()  # Recursively check next step
+                return
+            elif found_step == 'authenticator_code':
+                await handle_authenticator_code_display(page)
+                await determine_and_handle_next_step()  # Check for next step
+                return
+            elif found_step == 'two_fa_input':
+                await handle_2fa_input(page)
+                await determine_and_handle_next_step()  # Check for next step
+                return
+            elif found_step == 'security_info_update':
+                await handle_security_info_update(page)
+                await determine_and_handle_next_step()  # Check for next step
+                return
+            elif found_step == 'stay_signed_in':
+                await handle_stay_signed_in(page)
+                return  # This should be the final step
+        else:
+            # If none of the expected elements are found, we might be done or on an unexpected page
+            logger.info("No expected post-login elements found - login may be complete")
 
     await determine_and_handle_next_step()
 
@@ -183,12 +206,22 @@ def extract_auth_code_from_url(url: str) -> Tuple[Optional[str], Optional[str]]:
     if 'code=' not in url:
         return None, None
     
-    parsed_url = urlparse(url)
-    query_params = parse_qs(parsed_url.query)
-    auth_code = query_params.get("code", [None])[0]
-    received_state = query_params.get("state", [None])[0]
-    
-    return auth_code, received_state
+    try:
+        parsed_url = urlparse(url)
+        query_params = parse_qs(parsed_url.query)
+        auth_code = query_params.get("code", [None])[0]
+        received_state = query_params.get("state", [None])[0]
+        
+        # Log the extraction for debugging
+        if auth_code:
+            logger.debug(f"Extracted auth code: {auth_code[:30]}... (length: {len(auth_code)})")
+        if received_state:
+            logger.debug(f"Extracted state: {received_state[:50]}... (length: {len(received_state)})")
+        
+        return auth_code, received_state
+    except Exception as e:
+        logger.error(f"Error extracting auth code from URL: {e}")
+        return None, None
 
 
 async def get_microsoft_redirect_code(email: str, password: str, state: str, code_challenge: str, nonce: str) -> Tuple[Optional[str], Optional[str]]:
@@ -338,18 +371,57 @@ async def exchange_code_for_tokens(auth_code: str, code_verifier: str) -> Tuple[
 
 def validate_state_parameter(expected_state: str, received_state: Optional[str]) -> bool:
     """Validate OAuth2 state parameter for CSRF protection."""
-    if received_state and received_state != expected_state:
-        logger.warning("WARNING: State mismatch!")
-        logger.info(f"  Expected: {expected_state}")
-        logger.info(f"  Received: {received_state}")
-        logger.info("  This could indicate a security issue, but we'll continue...")
-        return False
-    elif received_state == expected_state:
-        logger.info("State validation passed.")
-        return True
-    else:
+    if not received_state:
         logger.info("Note: State validation skipped - no state received")
         return False
+        
+    # Direct match - ideal case
+    if received_state == expected_state:
+        logger.info("State validation passed (direct match).")
+        return True
+    
+    # Handle Microsoft's composite state format
+    # Microsoft sometimes returns: {hash}{base64_encoded_original_params}
+    # Extract original state from base64 encoded parameters
+    try:
+        # Check if the received state contains base64 encoded data
+        # Typically formatted as: hash + base64_encoded_params
+        if len(received_state) > 64:  # Longer than a typical hash
+            # Try to find where the hash ends and base64 begins
+            # Look for common base64 patterns after initial hash part
+            for split_point in range(32, min(64, len(received_state))):
+                hash_part = received_state[:split_point]
+                potential_b64 = received_state[split_point:]
+                
+                try:
+                    # Attempt to decode as base64
+                    decoded = base64.b64decode(potential_b64, validate=True).decode('utf-8')
+                    
+                    # Parse as URL parameters
+                    if 'state=' in decoded:
+                        from urllib.parse import parse_qs
+                        params = parse_qs(decoded)
+                        extracted_state = params.get('state', [None])[0]
+                        
+                        if extracted_state == expected_state:
+                            logger.info("State validation passed (extracted from Microsoft composite format).")
+                            logger.info(f"  Original composite state: {received_state[:50]}...")
+                            logger.info(f"  Extracted state: {extracted_state}")
+                            return True
+                            
+                except (Exception):
+                    # Not valid base64 or doesn't contain expected format
+                    continue
+                    
+    except Exception as e:
+        logger.debug(f"Error parsing composite state: {e}")
+    
+    # If we get here, state validation failed
+    logger.warning("WARNING: State mismatch!")
+    logger.info(f"  Expected: {expected_state}")
+    logger.info(f"  Received: {received_state}")
+    logger.info("  This could indicate a security issue, but we'll continue...")
+    return False
 
 
 async def get_web_session_cookies(email: str, password: str) -> Tuple[Optional[Dict[str, str]], Optional[str]]:
@@ -532,8 +604,12 @@ async def authenticate_with_credentials(email: str, password: str, auth_type: st
                     "error": "Failed to obtain authorization code from Microsoft"
                 }
 
-            # Step 2: Validate state parameter
-            validate_state_parameter(state, received_state)
+            # Step 2: Validate state parameter (non-fatal)
+            state_valid = validate_state_parameter(state, received_state)
+            if not state_valid:
+                logger.warning("State validation failed, but continuing with authentication...")
+            else:
+                logger.info("State parameter validation successful")
 
             # Step 3: Exchange authorization code for tokens
             access_token, refresh_token = await exchange_code_for_tokens(auth_code, code_verifier)
@@ -753,7 +829,11 @@ async def authenticate_unified_webapp_flow(email: str, password: str) -> Dict[st
                 }
 
             logger.info(f"Successfully obtained OAuth2 auth code: {auth_code[:30]}...")
-            validate_state_parameter(state, received_state)
+            state_valid = validate_state_parameter(state, received_state)
+            if not state_valid:
+                logger.warning("State validation failed, but continuing with authentication...")
+            else:
+                logger.info("State parameter validation successful")
 
             # Step 4: Extract session cookies from current browser context
             cookies = await context.cookies()
@@ -938,7 +1018,11 @@ async def authenticate_unified(email: str, password: str) -> Dict[str, Any]:
                 }
 
             logger.info(f"Successfully obtained auth code: {auth_code[:30]}...")
-            validate_state_parameter(state, received_state)
+            state_valid = validate_state_parameter(state, received_state)
+            if not state_valid:
+                logger.warning("State validation failed, but continuing with authentication...")
+            else:
+                logger.info("State parameter validation successful")
 
             # Step 4: Extract session cookies
             cookies = await context.cookies()

@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(tree:*)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(del test_state_validation.py)"
     ],
     "deny": [],
     "ask": []
