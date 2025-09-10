@@ -35,7 +35,7 @@ API will be live at:
 
 You can run SchulwareAPI easily using Docker or pull prebuilt images from public registries.
 
-### Docker Compose
+### Docker Compose 
 
 You can also use the provided `compose.yml` for local development or deployment. Make sure to set up your `.env` file with the required environment variables.
 
