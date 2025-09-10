@@ -290,7 +290,7 @@ async def get_microsoft_redirect_code(email: str, password: str, state: str, cod
                 
             return auth_code, received_state
 
-        except Exception as e:
+        except Exception as e: 
             logger.error(f"Error during Microsoft authentication flow: {e}")
             # Uncomment the line below to save a screenshot for debugging on error
             # await page.screenshot(path="microsoft_auth_error.png")
