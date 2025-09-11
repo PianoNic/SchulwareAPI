@@ -48,7 +48,7 @@ jobs:
           VERSION="${{ steps.get_version.outputs.VERSION }}"
           git add application.properties
           git commit -m "🚀 Release version $VERSION [skip ci]"
-          git push origin main
+          git push origin HEAD:main
 
   build-and-push-docker:
     runs-on: ubuntu-latest
