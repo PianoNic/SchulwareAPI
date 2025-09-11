@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from src.application.services.db_service import setup_db
 from src.application.services.env_service import load_env
+from src.application.services.app_config_service import app_config
 from src.api.router_registry import router_registry
 from src.infrastructure.logging_config import setup_colored_logging
 from fastapi.openapi.utils import get_openapi
@@ -10,10 +11,14 @@ setup_colored_logging()
 load_env()
 setup_db()
 
+# Get version and environment from application.properties
+app_version = app_config.get_version()
+app_environment = app_config.get_environment()
+
 app = FastAPI(
     title="Schulware API Wrapper",
-    description="A FastAPI application to wrap Schulware API endpoints.",
-    version="1.0.0",
+    description=f"A FastAPI application to wrap Schulware API endpoints.\n\n**Environment:** {app_environment}",
+    version=app_version,
     redoc_url=None,
     docs_url="/"
 )
