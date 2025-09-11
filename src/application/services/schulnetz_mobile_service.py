@@ -2,7 +2,10 @@ import httpx
 from typing import Optional, Dict, Any
 from src.application.services.env_service import get_env_variable
 from src.application.services.token_service import token_service, ApplicationType
-from fastapi.logger import logger
+from src.infrastructure.logging_config import get_logger
+
+# Logger for this module
+logger = get_logger("mobile_api")
 
 class SchulnetzMobileService:
     def __init__(self):

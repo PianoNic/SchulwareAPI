@@ -1,5 +1,8 @@
 from fastapi import HTTPException
-from fastapi.logger import logger
+from src.infrastructure.logging_config import get_logger
+
+# Logger for this module
+logger = get_logger("web_auth")
 from src.application.dtos.auth_dto import WebSessionDto
 from src.application.services import db_service
 from src.api.auth import auth

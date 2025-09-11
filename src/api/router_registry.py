@@ -2,11 +2,14 @@ import importlib
 from pathlib import Path
 from typing import Optional
 from fastapi import FastAPI, APIRouter, Request
-from fastapi.logger import logger
+from src.infrastructure.logging_config import get_logger
 from fastapi.responses import JSONResponse
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+
+# Logger for this module
+logger = get_logger("router_registry")
 
 def get_client_ip(request: Request) -> str:
     """Get the real client IP address, handling reverse proxy scenarios."""

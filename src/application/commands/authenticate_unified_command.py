@@ -1,9 +1,11 @@
 from fastapi import HTTPException
-from fastapi.logger import logger
+from src.infrastructure.logging_config import get_logger
 from src.application.dtos.web.web_urls_dto import WebUrlsDto
 from src.application.services import db_service
 from src.application.dtos.auth_dto import MobileSessionDto, WebSessionDto
 from src.api.auth import auth
+
+logger = get_logger("unified_auth")
 
 async def authenticate_unified_command_async(email: str, password: str):
     if not email or not password:

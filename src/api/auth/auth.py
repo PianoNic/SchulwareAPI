@@ -11,8 +11,11 @@ import os
 from urllib.parse import urlparse, parse_qs, urlencode
 from typing import Optional, Tuple, Dict, Any
 from dotenv import load_dotenv
-from fastapi.logger import logger
+from src.infrastructure.logging_config import get_logger
 from playwright.async_api import async_playwright, Page, expect
+
+# Logger for this module
+logger = get_logger("authentication")
 
 two_fa_queue = asyncio.Queue()
 
