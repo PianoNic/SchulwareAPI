@@ -8,6 +8,9 @@ import base64
 import secrets
 import string
 import os
+import tempfile
+import shutil
+from pathlib import Path
 from urllib.parse import urlparse, parse_qs, urlencode
 from typing import Optional, Tuple, Dict, Any
 from dotenv import load_dotenv
@@ -22,9 +25,151 @@ two_fa_queue = asyncio.Queue()
 load_dotenv()
 
 SCHULNETZ_CLIENT_ID = os.getenv("SCHULNETZ_CLIENT_ID")
+DEBUG_WEBHOOK_URL = os.getenv("DEBUG_WEBHOOK_URL")  # Optional webhook for sending failure videos
 
 if not all([SCHULNETZ_CLIENT_ID]):
     raise EnvironmentError("Missing required environment variables.")
+
+
+async def compress_video_if_needed(video_path: str, max_size_mb: float = 4.5) -> str:
+    """
+    Compress video if it's larger than max_size_mb to ensure Discord compatibility.
+    
+    Args:
+        video_path: Path to the video file
+        max_size_mb: Maximum size in MB (default 4.5MB to be safe under 5MB limit)
+        
+    Returns:
+        Path to the (possibly compressed) video file
+    """
+    try:
+        file_size_mb = os.path.getsize(video_path) / (1024 * 1024)
+        logger.info(f"Video file size: {file_size_mb:.2f} MB")
+        
+        if file_size_mb <= max_size_mb:
+            logger.info("Video is within size limits, no compression needed")
+            return video_path
+            
+        logger.info(f"Video exceeds {max_size_mb}MB, attempting compression...")
+        
+        # Create compressed version path
+        compressed_path = video_path.replace('.webm', '_compressed.webm')
+        
+        try:
+            # Try to use ffmpeg for compression if available
+            import subprocess
+            
+            # Calculate bitrate to achieve target size (rough estimation)
+            target_bitrate = int((max_size_mb * 1024 * 8) / 60)  # Assuming ~60 second video
+            target_bitrate = max(50, target_bitrate)  # Minimum 50k bitrate
+            
+            cmd = [
+                'ffmpeg', '-i', video_path, '-c:v', 'libvpx-vp9', 
+                '-b:v', f'{target_bitrate}k', '-crf', '35', 
+                '-c:a', 'libopus', '-b:a', '32k',
+                '-y', compressed_path
+            ]
+            
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            
+            if result.returncode == 0 and os.path.exists(compressed_path):
+                compressed_size_mb = os.path.getsize(compressed_path) / (1024 * 1024)
+                logger.info(f"Video compressed to {compressed_size_mb:.2f} MB")
+                return compressed_path
+            else:
+                logger.warning(f"ffmpeg compression failed: {result.stderr}")
+                
+        except (ImportError, subprocess.TimeoutExpired, FileNotFoundError):
+            logger.warning("ffmpeg not available or failed, using original video")
+            
+        return video_path
+        
+    except Exception as e:
+        logger.error(f"Error compressing video: {e}")
+        return video_path
+
+
+async def send_failure_video_to_webhook(video_path: str, log_files: Dict[str, str], user_email: str, error_message: str, timestamp: str) -> bool:
+    """
+    Send authentication failure video and multiple log files to webhook endpoint (Discord-compatible).
+    
+    Args:
+        video_path: Path to the recorded video file
+        log_files: Dictionary of log file names to paths (e.g., {'urls': '/path/to/urls.txt', 'errors': '/path/to/errors.log'})
+        user_email: Email of the user who failed authentication 
+        error_message: The error that occurred
+        timestamp: When the failure occurred
+        
+    Returns:
+        True if sent successfully, False otherwise
+    """
+    if not DEBUG_WEBHOOK_URL:
+        logger.info("🔕 No DEBUG_WEBHOOK_URL configured, skipping webhook notification")
+        return False
+        
+    try:
+        logger.info(f"Sending failure video and logs to webhook: {DEBUG_WEBHOOK_URL}")
+        
+        # Compress video if needed for Discord's 8MB limit (we use 4.5MB to be safe)
+        final_video_path = await compress_video_if_needed(video_path, max_size_mb=4.5)
+        
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            files = {}
+            
+            # Add video file if it exists and is under size limit
+            if os.path.exists(final_video_path):
+                video_size_mb = os.path.getsize(final_video_path) / (1024 * 1024)
+                if video_size_mb < 5.0:  # Discord's limit is ~8MB, but we use 5MB to be safe
+                    with open(final_video_path, 'rb') as video_file:
+                        files['file'] = ('auth_failure.webm', video_file.read(), 'video/webm')
+                else:
+                    logger.warning(f"Video still too large ({video_size_mb:.2f}MB) after compression, skipping video upload")
+            
+            # Add multiple log files (Discord supports up to 10 attachments)
+            file_counter = 2
+            for log_name, log_path in log_files.items():
+                if os.path.exists(log_path) and file_counter <= 10:
+                    with open(log_path, 'r', encoding='utf-8') as log_file:
+                        filename = f"{log_name}.log" if not log_path.endswith(('.txt', '.log')) else os.path.basename(log_path)
+                        files[f'file{file_counter}'] = (filename, log_file.read(), 'text/plain')
+                        file_counter += 1
+            
+            # Prepare Discord webhook payload with detailed identification
+            content = f"""🔴 **Authentication Failure Debug**
+**👤 User:** `{user_email}`
+**⏰ Time:** `{timestamp}`
+**🌐 Server:** `{os.getenv('SCHULNETZ_API_BASE_URL', 'Unknown')}`
+**🔧 Instance:** `{os.uname().nodename if hasattr(os, 'uname') else 'Unknown'}`
+**❌ Error:** `{error_message}`
+**📁 Files Attached:** {len(files)} files (video + {file_counter-2} logs)
+**🎯 Event:** Authentication failed - complete session recording and logs attached"""
+            
+            # For Discord webhooks, we use the 'content' field
+            data = {'content': content}
+            
+            response = await client.post(
+                DEBUG_WEBHOOK_URL,
+                files=files,
+                data=data
+            )
+            
+            if response.status_code in [200, 204]:
+                logger.info(f"🔔 WEBHOOK NOTIFICATION: Successfully sent authentication failure debug data to Discord webhook for user {user_email}")
+                return True
+            else:
+                logger.warning(f"Webhook responded with status {response.status_code}: {response.text}")
+                return False
+                    
+    except Exception as e:
+        logger.error(f"Failed to send video and logs to webhook: {e}")
+        return False
+    finally:
+        # Clean up compressed video if it was created
+        if 'final_video_path' in locals() and final_video_path != video_path and os.path.exists(final_video_path):
+            try:
+                os.remove(final_video_path)
+            except Exception:
+                pass
 
 
 def generate_random_string(length: int) -> str:
@@ -228,7 +373,7 @@ def extract_auth_code_from_url(url: str) -> Tuple[Optional[str], Optional[str]]:
         return None, None
 
 
-async def get_microsoft_redirect_code(email: str, password: str, state: str, code_challenge: str, nonce: str) -> Tuple[Optional[str], Optional[str]]:
+async def get_microsoft_redirect_code(email: str, password: str, state: str, code_challenge: str, nonce: str, record_on_failure: bool = None) -> Tuple[Optional[str], Optional[str]]:
     """
     Navigate through Microsoft authentication flow and extract the authorization code.
     
@@ -238,6 +383,7 @@ async def get_microsoft_redirect_code(email: str, password: str, state: str, cod
         state: OAuth2 state parameter for CSRF protection
         code_challenge: PKCE code challenge
         nonce: OpenID Connect nonce for replay protection
+        record_on_failure: Whether to record video on authentication failure (None = auto-detect from webhook URL)
         
     Returns:
         Tuple of (auth_code, received_state) or (None, None) if failed
@@ -247,20 +393,116 @@ async def get_microsoft_redirect_code(email: str, password: str, state: str, cod
     
     logger.info(f"Starting Microsoft authentication flow...")
 
+    # Determine if we should record the session
+    if record_on_failure is None:
+        record_on_failure = bool(DEBUG_WEBHOOK_URL)
+        
+    if record_on_failure:
+        logger.info("Video recording enabled - recording entire authentication session")
+    else:
+        logger.info("Video recording disabled (no DEBUG_WEBHOOK_URL configured)")
+
+    # Create temporary directory for video recording only if needed
+    temp_dir = None
+    video_path = None
+    
+    if record_on_failure:
+        temp_dir = tempfile.mkdtemp(prefix="auth_debug_")
+        video_path = os.path.join(temp_dir, "auth_session.webm")
+
     async with async_playwright() as playwright:
         browser = await playwright.chromium.launch(headless=True)
-        page = await browser.new_page()
+        
+        # Configure browser context with video recording for entire session
+        context_options = {}
+        if record_on_failure:
+            context_options['record_video_dir'] = temp_dir
+            context_options['record_video_size'] = {"width": 1280, "height": 720}
+            logger.info("Starting video recording of complete authentication session")
+        
+        context = await browser.new_context(**context_options)
+        page = await context.new_page()
 
         # Track all URLs visited during the authentication flow
         visited_urls = []
+        urls_log_path = os.path.join(temp_dir, "visited_urls.txt") if temp_dir else None
         
         def track_navigation(frame):
             url = frame.url
-            visited_urls.append(url)
+            timestamp = datetime.now().isoformat()
+            visit_info = f"[{timestamp}] {url}"
+            visited_urls.append(visit_info)
+            
+            # Write to log file in real-time ONLY if webhook debugging is enabled
+            if record_on_failure and urls_log_path:
+                try:
+                    with open(urls_log_path, 'a', encoding='utf-8') as f:
+                        f.write(visit_info + '\n')
+                except Exception as log_error:
+                    logger.warning(f"Failed to write URL to log: {log_error}")
+            
+            # Keep normal console logging unchanged
             if "microsoft" not in url.lower():
                 logger.info(f"Navigation: {url}")
         
         page.on("framenavigated", track_navigation)
+        
+        # Initialize multiple detailed log files ONLY if webhook is configured
+        auth_log_path = os.path.join(temp_dir, "auth_details.log") if temp_dir else None
+        page_content_log_path = os.path.join(temp_dir, "page_content.log") if temp_dir else None
+        errors_log_path = os.path.join(temp_dir, "errors.log") if temp_dir else None
+        
+        # Only create detailed logs if webhook debugging is enabled
+        if record_on_failure and urls_log_path:
+            try:
+                # URLs log
+                with open(urls_log_path, 'w', encoding='utf-8') as f:
+                    f.write(f"Authentication Debug - Visited URLs\n")
+                    f.write(f"User: {email}\n")
+                    f.write(f"Session Start: {datetime.now().isoformat()}\n")
+                    f.write("=" * 50 + "\n\n")
+                
+                # Authentication details log
+                with open(auth_log_path, 'w', encoding='utf-8') as f:
+                    f.write(f"Authentication Session Details\n")
+                    f.write(f"User: {email}\n")
+                    f.write(f"Session Start: {datetime.now().isoformat()}\n")
+                    f.write(f"Auth URL: {auth_url}\n")
+                    f.write(f"State: {state}\n")
+                    f.write(f"Code Challenge: {code_challenge}\n")
+                    f.write(f"Nonce: {nonce}\n")
+                    f.write("=" * 50 + "\n\n")
+                
+                # Page content log
+                with open(page_content_log_path, 'w', encoding='utf-8') as f:
+                    f.write(f"Page Content and Console Logs\n")
+                    f.write(f"Session Start: {datetime.now().isoformat()}\n")
+                    f.write("=" * 50 + "\n\n")
+                
+                # Errors log
+                with open(errors_log_path, 'w', encoding='utf-8') as f:
+                    f.write(f"Authentication Errors and Issues\n")
+                    f.write(f"Session Start: {datetime.now().isoformat()}\n")
+                    f.write("=" * 50 + "\n\n")
+                    
+            except Exception as log_error:
+                logger.warning(f"Failed to initialize webhook debug log files: {log_error}")
+        
+        # Set up console message logging ONLY for webhook debugging
+        def log_console_message(msg):
+            if record_on_failure and page_content_log_path:
+                try:
+                    with open(page_content_log_path, 'a', encoding='utf-8') as f:
+                        f.write(f"[{datetime.now().isoformat()}] CONSOLE {msg.type.upper()}: {msg.text}\n")
+                except Exception:
+                    pass
+        
+        if record_on_failure:
+            page.on("console", log_console_message)
+
+        auth_code, received_state = None, None
+        authentication_failed = False
+        error_message = ""
 
         try:
             # Navigate to the authorization URL which will redirect to Microsoft
@@ -269,19 +511,51 @@ async def get_microsoft_redirect_code(email: str, password: str, state: str, cod
             # Confirm we have landed on the Microsoft login page after the redirect
             logger.info(f"Playwright landed on: {page.url}")
             if "login.microsoftonline.com" not in page.url:
-                logger.error("ERROR: Did not redirect to Microsoft login page as expected.")
-                logger.info(f"Final URL: {page.url}")
-                logger.info(f"Page content (partial): {(await page.content())[:1000]}")
+                error_message = f"Did not redirect to Microsoft login page as expected. Final URL: {page.url}"
+                logger.error(f"ERROR: {error_message}")
+                page_content = await page.content()
+                logger.info(f"Page content (partial): {page_content[:1000]}")
+                authentication_failed = True
+                
+                # Log detailed error information ONLY for webhook debugging
+                if record_on_failure and errors_log_path:
+                    try:
+                        with open(errors_log_path, 'a', encoding='utf-8') as f:
+                            f.write(f"[{datetime.now().isoformat()}] CRITICAL: No Microsoft redirect\n")
+                            f.write(f"Expected: login.microsoftonline.com\n")
+                            f.write(f"Actual URL: {page.url}\n")
+                            f.write(f"Full page content:\n{page_content}\n")
+                            f.write("-" * 50 + "\n")
+                    except Exception:
+                        pass
+                
                 return None, None
 
             # Handle the interactive Microsoft login and post-login flow
             logger.info("Processing Microsoft login and post-login steps...")
+            
+            # Log authentication step start ONLY for webhook debugging
+            if record_on_failure and auth_log_path:
+                try:
+                    with open(auth_log_path, 'a', encoding='utf-8') as f:
+                        f.write(f"[{datetime.now().isoformat()}] Starting Microsoft login process\n")
+                        f.write(f"Current URL: {page.url}\n")
+                except Exception:
+                    pass
+            
             await perform_microsoft_login(page, email, password)
             await handle_post_login_flow(page)
+            
+            # Log authentication step completion ONLY for webhook debugging
+            if record_on_failure and auth_log_path:
+                try:
+                    with open(auth_log_path, 'a', encoding='utf-8') as f:
+                        f.write(f"[{datetime.now().isoformat()}] Microsoft login process completed\n")
+                        f.write(f"Current URL: {page.url}\n")
+                except Exception:
+                    pass
 
             # Search through all visited URLs to find one with authorization code
-            auth_code, received_state = None, None
-            
             for url in visited_urls:
                 if 'code=' in url:
                     auth_code, received_state = extract_auth_code_from_url(url)
@@ -289,17 +563,116 @@ async def get_microsoft_redirect_code(email: str, password: str, state: str, cod
                         break
             
             if not auth_code:
-                logger.warning(f"No auth code found in {len(visited_urls)} visited URLs. Final: {page.url}")
+                error_message = f"No auth code found in {len(visited_urls)} visited URLs. Final: {page.url}"
+                logger.warning(error_message)
+                authentication_failed = True
+                
+                # Log detailed auth code search failure ONLY for webhook debugging
+                if record_on_failure and errors_log_path:
+                    try:
+                        with open(errors_log_path, 'a', encoding='utf-8') as f:
+                            f.write(f"[{datetime.now().isoformat()}] AUTH CODE SEARCH FAILED\n")
+                            f.write(f"Total URLs visited: {len(visited_urls)}\n")
+                            f.write(f"Final URL: {page.url}\n")
+                            f.write(f"All visited URLs:\n")
+                            for url_entry in visited_urls:
+                                f.write(f"  {url_entry}\n")
+                            f.write("-" * 50 + "\n")
+                    except Exception:
+                        pass
                 
             return auth_code, received_state
 
         except Exception as e: 
-            logger.error(f"Error during Microsoft authentication flow: {e}")
-            # Uncomment the line below to save a screenshot for debugging on error
-            # await page.screenshot(path="microsoft_auth_error.png")
+            error_message = f"Error during Microsoft authentication flow: {e}"
+            logger.error(error_message)
+            authentication_failed = True
+            
+            # Log the exception details ONLY for webhook debugging
+            if record_on_failure and errors_log_path:
+                try:
+                    import traceback
+                    with open(errors_log_path, 'a', encoding='utf-8') as f:
+                        f.write(f"[{datetime.now().isoformat()}] CRITICAL EXCEPTION\n")
+                        f.write(f"Error: {error_message}\n")
+                        f.write(f"Current URL: {page.url}\n")
+                        f.write(f"Traceback:\n{traceback.format_exc()}\n")
+                        f.write("-" * 50 + "\n")
+                except Exception:
+                    pass
+            
             return None, None
         finally:
+            # Close the page and context to finish video recording
+            await page.close()
+            await context.close()
             await browser.close()
+            
+            # Handle video recording - recorded entire session, send only on failure
+            if record_on_failure and temp_dir:
+                try:
+                    # Finalize URLs log file ONLY for webhook debugging
+                    if record_on_failure and urls_log_path:
+                        try:
+                            with open(urls_log_path, 'a', encoding='utf-8') as f:
+                                f.write(f"\nSession End: {datetime.now().isoformat()}\n")
+                                f.write(f"Total URLs visited: {len(visited_urls)}\n")
+                                if authentication_failed:
+                                    f.write(f"Authentication Status: FAILED\n")
+                                    f.write(f"Final Error: {error_message}\n")
+                                else:
+                                    f.write(f"Authentication Status: SUCCESS\n")
+                        except Exception as log_error:
+                            logger.warning(f"Failed to finalize webhook debug URL log: {log_error}")
+                    
+                    # Find the generated video file
+                    video_files = list(Path(temp_dir).glob("*.webm"))
+                    if video_files:
+                        actual_video_path = str(video_files[0])
+                        
+                        if authentication_failed:
+                            # Send to webhook only on failure
+                            logger.info(f"Authentication failed - sending video to webhook: {actual_video_path}")
+                            
+                            timestamp = datetime.now().isoformat()
+                            
+                            # Prepare log files dictionary
+                            log_files = {}
+                            if urls_log_path and os.path.exists(urls_log_path):
+                                log_files['visited_urls'] = urls_log_path
+                            if auth_log_path and os.path.exists(auth_log_path):
+                                log_files['auth_details'] = auth_log_path
+                            if page_content_log_path and os.path.exists(page_content_log_path):
+                                log_files['page_content'] = page_content_log_path
+                            if errors_log_path and os.path.exists(errors_log_path):
+                                log_files['errors'] = errors_log_path
+                            
+                            if log_files:
+                                await send_failure_video_to_webhook(
+                                    actual_video_path,
+                                    log_files,
+                                    email,
+                                    error_message,
+                                    timestamp
+                                )
+                            else:
+                                logger.warning("No log files found, skipping webhook send")
+                        else:
+                            # Authentication succeeded - just log the video was recorded
+                            logger.info(f"Authentication successful - video recorded but not sent: {actual_video_path}")
+                        
+                    else:
+                        logger.warning("No video file found after authentication session")
+                        
+                except Exception as video_error:
+                    logger.error(f"Error handling session video: {video_error}")
+                finally:
+                    # Clean up temporary directory
+                    if temp_dir and os.path.exists(temp_dir):
+                        try:
+                            shutil.rmtree(temp_dir)
+                        except Exception as cleanup_error:
+                            logger.warning(f"Failed to clean up temp directory {temp_dir}: {cleanup_error}")
 
 
 async def exchange_code_for_tokens(auth_code: str, code_verifier: str) -> Tuple[Optional[str], Optional[str]]:
@@ -595,7 +968,7 @@ async def authenticate_with_credentials(email: str, password: str, auth_type: st
             
             logger.info("Starting OAuth2 flow with generated parameters")
 
-            # Step 1: Get authorization code from Microsoft
+            # Step 1: Get authorization code from Microsoft (auto-detect video recording based on webhook URL)
             auth_code, received_state = await get_microsoft_redirect_code(
                 email, password, state, code_challenge, nonce
             )
@@ -956,24 +1329,60 @@ async def authenticate_unified(email: str, password: str) -> Dict[str, Any]:
     logger.info(f"  State: {state}")
     logger.info(f"  Nonce: {nonce}")
 
+    # Determine if we should record on failure based on webhook URL
+    record_on_failure = bool(DEBUG_WEBHOOK_URL)
+    if record_on_failure:
+        logger.info("Video recording enabled for unified authentication debugging")
+    else:
+        logger.info("Video recording disabled (no DEBUG_WEBHOOK_URL configured)")
+
+    # Create temporary directory for video recording only if needed
+    temp_dir = None
+    urls_log_path = None
+    
+    if record_on_failure:
+        temp_dir = tempfile.mkdtemp(prefix="auth_unified_debug_")
+        urls_log_path = os.path.join(temp_dir, "visited_urls.txt")
+
     async with async_playwright() as playwright:
         browser = await playwright.chromium.launch(headless=True)
-        context = await browser.new_context()
+        
+        # Configure browser context with video recording if enabled
+        context_options = {}
+        if record_on_failure:
+            context_options['record_video_dir'] = temp_dir
+            context_options['record_video_size'] = {"width": 1280, "height": 720}
+        
+        context = await browser.new_context(**context_options)
         page = await context.new_page()
 
         # Variables to capture auth code during navigation
         auth_code = None
         received_state = None
         redirect_domain = None
+        visited_urls = []
+        authentication_failed = False
+        error_message = ""
 
-        # Set up frame navigation listener
+        # Set up frame navigation listener with URL logging
         def handle_frame_navigated(frame):
             nonlocal auth_code, received_state, redirect_domain
+            
+            url = frame.url
+            timestamp = datetime.now().isoformat()
+            visit_info = f"[{timestamp}] {url}"
+            visited_urls.append(visit_info)
+            
+            # Write to log file in real-time if recording
+            if urls_log_path:
+                try:
+                    with open(urls_log_path, 'a', encoding='utf-8') as f:
+                        f.write(visit_info + '\n')
+                except Exception as log_error:
+                    logger.warning(f"Failed to write URL to log: {log_error}")
+            
             if auth_code:  # Already found
                 return
-                
-            url = frame.url
-            # logger.info(f"Frame navigated to: {url}")
             
             # Check if this URL contains the auth code
             if "code=" in url and ("schulnetz" in url):
@@ -986,6 +1395,17 @@ async def authenticate_unified(email: str, password: str) -> Dict[str, Any]:
                     logger.info(f"Captured auth code from navigation: {code[:30]}...")
 
         page.on("framenavigated", handle_frame_navigated)
+        
+        # Initialize URLs log file with header if recording
+        if urls_log_path:
+            try:
+                with open(urls_log_path, 'w', encoding='utf-8') as f:
+                    f.write(f"Unified Authentication Debug - Visited URLs\n")
+                    f.write(f"User: {email}\n")
+                    f.write(f"Session Start: {datetime.now().isoformat()}\n")
+                    f.write("=" * 50 + "\n\n")
+            except Exception as log_error:
+                logger.warning(f"Failed to initialize URL log file: {log_error}")
 
         try:
             # Step 1: Start with OAuth2 authorization URL
@@ -1019,9 +1439,11 @@ async def authenticate_unified(email: str, password: str) -> Dict[str, Any]:
                 redirect_domain = "schulnetz.web.app" if "web.app" in current_url else "schulnetz.bbbaden.ch"
 
             if not auth_code:
+                error_message = f"No authorization code captured. Final URL: {page.url}"
+                authentication_failed = True
                 return {
                     "success": False,
-                    "error": f"No authorization code captured. Final URL: {page.url}"
+                    "error": error_message
                 }
 
             logger.info(f"Successfully obtained auth code: {auth_code[:30]}...")
@@ -1062,21 +1484,138 @@ async def authenticate_unified(email: str, password: str) -> Dict[str, Any]:
                 logger.warning(f"Could not establish web session: {e}")
 
         except Exception as e:
-            logger.error(f"Error during unified authentication: {e}")
+            error_message = f"Error during unified authentication: {e}"
+            logger.error(error_message)
+            authentication_failed = True
             return {"success": False, "error": f"Authentication failed: {str(e)}"}
         finally:
+            # Close the page and context to finish video recording
+            await page.close()
+            await context.close()
             await browser.close()
+            
+            # Handle video recording for failed authentication
+            if record_on_failure and authentication_failed and temp_dir:
+                try:
+                    # Finalize URLs log file
+                    if urls_log_path:
+                        try:
+                            with open(urls_log_path, 'a', encoding='utf-8') as f:
+                                f.write(f"\nSession End: {datetime.now().isoformat()}\n")
+                                f.write(f"Total URLs visited: {len(visited_urls)}\n")
+                                f.write(f"Final Error: {error_message}\n")
+                        except Exception as log_error:
+                            logger.warning(f"Failed to finalize URL log: {log_error}")
+                    
+                    # Find the generated video file
+                    video_files = list(Path(temp_dir).glob("*.webm"))
+                    if video_files:
+                        actual_video_path = str(video_files[0])
+                        logger.info(f"Unified authentication failure video recorded: {actual_video_path}")
+                        
+                        # Send to webhook if configured (includes both video and URLs log)
+                        timestamp = datetime.now().isoformat()
+                        if urls_log_path and os.path.exists(urls_log_path):
+                            await send_failure_video_to_webhook(
+                                actual_video_path,
+                                urls_log_path,
+                                email,
+                                error_message,
+                                timestamp
+                            )
+                        else:
+                            logger.warning("URLs log file not found, skipping webhook send")
+                        
+                    else:
+                        logger.warning("No video file found after unified authentication failure")
+                        
+                except Exception as video_error:
+                    logger.error(f"Error handling unified failure video: {video_error}")
+                finally:
+                    # Clean up temporary directory
+                    if temp_dir and os.path.exists(temp_dir):
+                        try:
+                            shutil.rmtree(temp_dir)
+                        except Exception as cleanup_error:
+                            logger.warning(f"Failed to clean up temp directory {temp_dir}: {cleanup_error}")
 
     # Step 6: Exchange for tokens
     try:
         access_token, refresh_token = await exchange_code_for_tokens(auth_code, code_verifier)
         
         if not access_token:
+            # Token exchange failed - need to handle video recording here too
+            token_error_message = "Token exchange failed - no access token received"
+            if record_on_failure and temp_dir:
+                try:
+                    # Finalize URLs log file for token exchange failure
+                    if urls_log_path and os.path.exists(urls_log_path):
+                        with open(urls_log_path, 'a', encoding='utf-8') as f:
+                            f.write(f"\nToken Exchange Failed: {datetime.now().isoformat()}\n")
+                            f.write(f"Error: {token_error_message}\n")
+                    
+                    # Find and send video for token exchange failure
+                    video_files = list(Path(temp_dir).glob("*.webm"))
+                    if video_files:
+                        actual_video_path = str(video_files[0])
+                        logger.info(f"Token exchange failure video recorded: {actual_video_path}")
+                        
+                        timestamp = datetime.now().isoformat()
+                        if urls_log_path and os.path.exists(urls_log_path):
+                            await send_failure_video_to_webhook(
+                                actual_video_path,
+                                urls_log_path,
+                                email,
+                                token_error_message,
+                                timestamp
+                            )
+                finally:
+                    # Clean up after token failure
+                    if temp_dir and os.path.exists(temp_dir):
+                        try:
+                            shutil.rmtree(temp_dir)
+                        except Exception:
+                            pass
+                            
             return {"success": False, "error": "Token exchange failed"}
         # Do NOT return here! Let it continue to the DB save code below.
 
     except Exception as e:
-        logger.error(f"Token exchange error: {e}")
+        token_error_message = f"Token exchange error: {e}"
+        logger.error(token_error_message)
+        
+        # Handle video recording for token exchange exception
+        if record_on_failure and temp_dir:
+            try:
+                # Finalize URLs log file for token exchange exception
+                if urls_log_path and os.path.exists(urls_log_path):
+                    with open(urls_log_path, 'a', encoding='utf-8') as f:
+                        f.write(f"\nToken Exchange Exception: {datetime.now().isoformat()}\n")
+                        f.write(f"Error: {token_error_message}\n")
+                
+                # Find and send video for token exchange exception
+                video_files = list(Path(temp_dir).glob("*.webm"))
+                if video_files:
+                    actual_video_path = str(video_files[0])
+                    logger.info(f"Token exchange exception video recorded: {actual_video_path}")
+                    
+                    timestamp = datetime.now().isoformat()
+                    if urls_log_path and os.path.exists(urls_log_path):
+                        await send_failure_video_to_webhook(
+                            actual_video_path,
+                            urls_log_path,
+                            email,
+                            token_error_message,
+                            timestamp
+                        )
+            finally:
+                # Clean up after token exception
+                if temp_dir and os.path.exists(temp_dir):
+                    try:
+                        shutil.rmtree(temp_dir)
+                    except Exception:
+                        pass
+        
         return {"success": False, "error": f"Token exchange failed: {str(e)}"}
 
     return {

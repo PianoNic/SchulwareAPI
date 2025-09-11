@@ -15,6 +15,13 @@ COPY requirements.txt .
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Install ffmpeg for video compression and Chromium browser with dependencies
+# Installing ffmpeg before Playwright for video processing capabilities
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
 # Install only Chromium browser and its dependencies using the official Playwright method
 # This installs only Chromium and its system dependencies, following Playwright best practices
 RUN playwright install --with-deps chromium
