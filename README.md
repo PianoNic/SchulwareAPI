@@ -4,7 +4,7 @@
 </p>
 <p align="center">
   <strong>Unified API for Schulnetz, simplifying data access with dynamic routing.</strong>
-</p> 
+</p>
 <p align="center">
   <a href="https://github.com/PianoNic/SchulwareAPI"><img src="https://badgetrack.pianonic.ch/badge?tag=schulware-api&label=visits&color=243aae&style=flat" alt="visits"/></a>
   <a href="https://github.com/PianoNic/SchulwareAPI/blob/main/LICENSE"><img src="https://img.shields.io/github/license/PianoNic/SchulwareAPI?color=243aae"/></a>
