@@ -1,10 +1,11 @@
 import httpx
 from typing import Optional, Dict, Any
-from fastapi import logger
+from src.infrastructure.logging_config import get_logger
 from src.application.services.env_service import get_env_variable
 from src.application.services.token_service import token_service, ApplicationType
 
-log = logger.logger
+# Logger for this module
+logger = get_logger("web_scraper")
 
 class SchulnetzWebService:
     def __init__(self):
@@ -37,7 +38,7 @@ class SchulnetzWebService:
         headers = self._get_web_headers(user_id)
         
         if not cookies:
-            log.error("No web session cookies found")
+            logger.error("No web session cookies found")
             return None
         
         async with httpx.AsyncClient() as client:
@@ -50,7 +51,7 @@ class SchulnetzWebService:
                 response.raise_for_status()
                 return response.text
             except Exception as e:
-                log.error(f"Failed to get dashboard: {e}")
+                logger.error(f"Failed to get dashboard: {e}")
                 return None
     
     async def get_page(self, user_id: str, page_id: str, 
@@ -60,7 +61,7 @@ class SchulnetzWebService:
         headers = self._get_web_headers(user_id)
         
         if not cookies:
-            log.error("No web session cookies found")
+            logger.error("No web session cookies found")
             return None
         
         params = {"pageid": page_id}
@@ -78,7 +79,7 @@ class SchulnetzWebService:
                 response.raise_for_status()
                 return response.text
             except Exception as e:
-                log.error(f"Failed to get page {page_id}: {e}")
+                logger.error(f"Failed to get page {page_id}: {e}")
                 return None
     
     async def proxy_web_request(self, user_id: str, path: str, method: str = "GET",
@@ -88,7 +89,7 @@ class SchulnetzWebService:
         headers = self._get_web_headers(user_id)
         
         if not cookies:
-            log.error("No web session cookies found")
+            logger.error("No web session cookies found")
             return None
         
         # Build full URL
@@ -108,7 +109,7 @@ class SchulnetzWebService:
                 )
                 return response
             except Exception as e:
-                log.error(f"Failed to proxy web request: {e}")
+                logger.error(f"Failed to proxy web request: {e}")
                 return None
     
     async def extract_session_info(self, response_text: str, response_cookies: Dict) -> Dict:

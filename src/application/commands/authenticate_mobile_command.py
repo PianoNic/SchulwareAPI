@@ -2,8 +2,11 @@ from fastapi import HTTPException
 from src.application.services import db_service
 from src.application.dtos.auth_dto import MobileSessionDto
 from src.api.auth import auth
-from fastapi.logger import logger
+from src.infrastructure.logging_config import get_logger
 import secrets
+
+# Logger for this module
+logger = get_logger("mobile_auth")
 
 async def authenticate_mobile_command_async(email: str, password: str):
     if not email or not password:
