@@ -43,7 +43,7 @@ You can also use the provided `compose.yml` for local development or deployment.
 docker compose up -d
 ```
 
-### Option 2: Run with Docker Compose
+### Option 2: Run with Docker Compose (Recommended)
 **1. Create a `compose.yml` file:**  
 Use your favorite editor to create a `compose.yml` file and paste this into it:
 ```yaml
@@ -53,18 +53,37 @@ services:
     # image: ghcr.io/pianonic/schulwareapi:latest # Uses the image from GitHub Container Registry
     ports:
       - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - SCHULNETZ_API_BASE_URL=${SCHULNETZ_API_BASE_URL}
+      - SCHULNETZ_WEB_BASE_URL=${SCHULNETZ_WEB_BASE_URL}
+      - SCHULNETZ_CLIENT_ID=${SCHULNETZ_CLIENT_ID}
     env_file:
       - .env
+    volumes:
+      - ./data:/app/data          # Persistent data storage (database, user sessions)
+      - ./logs:/app/logs          # Persistent log storage
+      - ./temp:/tmp               # Temporary files (auth videos, screenshots)
     restart: unless-stopped
     init: true  # Recommended to avoid zombie processes
     ipc: host   # Recommended for Chromium to avoid memory crashes
 ```
 
-**2. Start it:**
+**2. Create required directories:**
+```bash
+mkdir -p data logs temp
+```
+
+**3. Start it:**
 ```bash
 docker compose up -d
 ```
 The API will be available at [http://localhost:8000](http://localhost:8000).
+
+**Data Persistence:**
+- `./data/` - Contains SQLite database and user session data
+- `./logs/` - Application logs for debugging and monitoring  
+- `./temp/` - Temporary files like authentication videos and browser screenshots
 
 ## 📜 License
 This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.

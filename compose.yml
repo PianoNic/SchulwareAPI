@@ -12,6 +12,10 @@ services:
       - SCHULNETZ_CLIENT_ID=${SCHULNETZ_CLIENT_ID}
     env_file:
       - .env
+    volumes:
+      - ./data:/app/data          # Persistent data storage
+      - ./logs:/app/logs          # Persistent log storage
+      - ./temp:/tmp               # Temporary files (auth videos, screenshots)
     restart: unless-stopped
     init: true  # Recommended to avoid zombie processes
     ipc: host   # Recommended for Chromium to avoid memory crashes

@@ -357,15 +357,19 @@ def extract_auth_code_from_url(url: str) -> Tuple[Optional[str], Optional[str]]:
     
     try:
         parsed_url = urlparse(url)
-        query_params = parse_qs(parsed_url.query)
+        query_params = parse_qs(parsed_url.query, keep_blank_values=True)
         auth_code = query_params.get("code", [None])[0]
         received_state = query_params.get("state", [None])[0]
         
         # Log the extraction for debugging
         if auth_code:
-            logger.debug(f"Extracted auth code: {auth_code[:30]}... (length: {len(auth_code)})")
+            logger.info(f"Extracted auth code: {auth_code[:50]}... (length: {len(auth_code)})")
         if received_state:
-            logger.debug(f"Extracted state: {received_state[:50]}... (length: {len(received_state)})")
+            logger.info(f"Extracted state: {received_state[:50]}... (length: {len(received_state)})")
+        
+        # Log the full URL for debugging (with sensitive parts truncated)
+        safe_url = url.replace(auth_code, f"{auth_code[:20]}...TRUNCATED") if auth_code else url
+        logger.info(f"Auth code extraction from URL: {safe_url[:200]}...")
         
         return auth_code, received_state
     except Exception as e:
@@ -716,6 +720,11 @@ async def exchange_code_for_tokens(auth_code: str, code_verifier: str) -> Tuple[
     }
 
     logger.info("Exchanging authorization code for tokens...")
+    logger.info(f"Token exchange URL: {token_url}")
+    logger.info(f"Auth code length: {len(auth_code)}")
+    logger.info(f"Auth code (first 50 chars): {auth_code[:50]}...")
+    logger.info(f"Code verifier length: {len(code_verifier)}")
+    logger.info(f"Client ID: {SCHULNETZ_CLIENT_ID}")
     
     try:
         token_response = await httpx_client.post(
