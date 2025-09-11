@@ -61,9 +61,8 @@ services:
     env_file:
       - .env
     volumes:
-      - ./data:/app/data          # Persistent data storage (database, user sessions)
-      - ./logs:/app/logs          # Persistent log storage
-      - ./temp:/tmp               # Temporary files (auth videos, screenshots)
+      - ./db:/app/db              # Database storage
+      - ./debug_video:/app/debug_video  # Debug video recordings
     restart: unless-stopped
     init: true  # Recommended to avoid zombie processes
     ipc: host   # Recommended for Chromium to avoid memory crashes
@@ -71,7 +70,7 @@ services:
 
 **2. Create required directories:**
 ```bash
-mkdir -p data logs temp
+mkdir -p db debug_video
 ```
 
 **3. Start it:**
@@ -81,9 +80,8 @@ docker compose up -d
 The API will be available at [http://localhost:8000](http://localhost:8000).
 
 **Data Persistence:**
-- `./data/` - Contains SQLite database and user session data
-- `./logs/` - Application logs for debugging and monitoring  
-- `./temp/` - Temporary files like authentication videos and browser screenshots
+- `./db/` - SQLite database files
+- `./debug_video/` - Authentication debug video recordings (when DEBUG_VIDEO_RECORDING=true)
 
 ## 📜 License
 This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.

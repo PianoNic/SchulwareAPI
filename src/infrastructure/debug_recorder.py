@@ -36,11 +36,17 @@ class AuthenticationDebugRecorder:
             return None
             
         try:
-            # Create temporary directory for videos
-            self.temp_dir = tempfile.mkdtemp(prefix="auth_debug_")
+            # Ensure debug_video directory exists
+            debug_video_dir = Path("debug_video")
+            debug_video_dir.mkdir(exist_ok=True)
+            
+            # Create subdirectory with timestamp for this session
+            timestamp = int(time.time())
+            session_dir = debug_video_dir / f"session_{timestamp}"
+            session_dir.mkdir(exist_ok=True)
+            self.temp_dir = str(session_dir)
             
             # Generate unique video filename
-            timestamp = int(time.time())
             video_hash = hashlib.md5(f"{timestamp}".encode()).hexdigest()
             video_filename = f"{video_hash}.webm"
             self.video_path = os.path.join(self.temp_dir, video_filename)
@@ -185,16 +191,11 @@ class AuthenticationDebugRecorder:
             return False
     
     def cleanup(self):
-        """Clean up temporary files and directories."""
+        """Clean up temporary files and directories (optional - videos persist for debugging)."""
         try:
-            if self.video_path and os.path.exists(self.video_path):
-                os.remove(self.video_path)
-                
-            if self.temp_dir and os.path.exists(self.temp_dir):
-                import shutil
-                shutil.rmtree(self.temp_dir)
-                
-            logger.debug("Debug recorder cleanup completed")
+            # Note: We don't automatically delete debug videos anymore
+            # They persist in debug_video/ folder for manual inspection
+            logger.debug("Debug recorder cleanup completed (videos preserved in debug_video/)")
             
         except Exception as e:
             logger.warning(f"Error during debug recorder cleanup: {e}")
