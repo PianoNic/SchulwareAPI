@@ -27,7 +27,7 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
           echo "Release version: $VERSION"
 
-      - name: Update application.properties
+      - name: Update application.properties and commit
         run: |
           VERSION="${{ steps.get_version.outputs.VERSION }}"
           echo "Updating version to: $VERSION"
@@ -42,13 +42,10 @@ jobs:
           
           echo "Updated application.properties:"
           cat application.properties
-
-      - name: Commit version update
-        run: |
-          VERSION="${{ steps.get_version.outputs.VERSION }}"
+          
           git add application.properties
-          git commit -m "🚀 Release version $VERSION [skip ci]"
-          git push origin main
+          git commit -m "Release version $VERSION [skip ci]"
+          git push origin HEAD:main
 
   build-and-push-docker:
     runs-on: ubuntu-latest
