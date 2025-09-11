@@ -2,8 +2,7 @@ name: Release Drafter
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   pull_request:
     types: [closed]
 
@@ -11,7 +10,7 @@ jobs:
   update_release_draft:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: release-drafter/release-drafter@v6
         with:
           config-name: release-drafter.yml
