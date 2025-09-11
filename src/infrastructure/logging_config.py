@@ -4,7 +4,8 @@ import colorlog
 def setup_colored_logging():
     handler = colorlog.StreamHandler()
     handler.setFormatter(colorlog.ColoredFormatter(
-        '%(log_color)s%(levelname)s%(reset)s:%(white)s     %(message)s',
+        '%(log_color)s%(levelname)s%(reset)s:%(white)s %(asctime)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S',
         log_colors={
             'DEBUG':    'cyan',
             'INFO':     'green', 

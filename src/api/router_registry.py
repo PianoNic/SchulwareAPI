@@ -8,8 +8,26 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
-# Shared limiter instance
-shared_limiter = Limiter(key_func=get_remote_address)
+def get_client_ip(request: Request) -> str:
+    """Get the real client IP address, handling reverse proxy scenarios."""
+    # Check X-Forwarded-For header (most common)
+    forwarded_for = request.headers.get("X-Forwarded-For")
+    if forwarded_for:
+        # Take the first IP from comma-separated list
+        client_ip = forwarded_for.split(",")[0].strip()
+        if client_ip:
+            return client_ip
+    
+    # Check X-Real-IP header (common with Nginx)
+    real_ip = request.headers.get("X-Real-IP")
+    if real_ip:
+        return real_ip.strip()
+    
+    # Fallback to direct connection
+    return get_remote_address(request)
+
+# Shared limiter instance with reverse proxy support
+shared_limiter = Limiter(key_func=get_client_ip)
 
 # Shared rate limit exception handler
 def shared_rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded):
