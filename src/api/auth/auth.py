@@ -12,6 +12,7 @@ from urllib.parse import urlparse, parse_qs, urlencode
 from typing import Optional, Tuple, Dict, Any
 from dotenv import load_dotenv
 from src.infrastructure.logging_config import get_logger
+from src.infrastructure.debug_recorder import get_debug_recorder
 from playwright.async_api import async_playwright, Page, expect
 
 # Logger for this module
@@ -246,10 +247,20 @@ async def get_microsoft_redirect_code(email: str, password: str, state: str, cod
     auth_url = "https://schulnetz.bbbaden.ch/authorize.php?" + urlencode(auth_params)
     
     logger.info(f"Starting Microsoft authentication flow...")
+    start_time = time.time()
+    recorder = get_debug_recorder()
 
+    # Initialize variables for cleanup
+    context = None
+    
     async with async_playwright() as playwright:
         browser = await playwright.chromium.launch(headless=True)
-        page = await browser.new_page()
+        context = await browser.new_context()
+        
+        # Start video recording if enabled
+        video_path = await recorder.start_recording(context)
+        
+        page = await context.new_page()
 
         # Track all URLs visited during the authentication flow
         visited_urls = []
@@ -291,12 +302,44 @@ async def get_microsoft_redirect_code(email: str, password: str, state: str, cod
             if not auth_code:
                 logger.warning(f"No auth code found in {len(visited_urls)} visited URLs. Final: {page.url}")
                 
+                # Stop video recording if context is available
+                if context:
+                    await recorder.stop_recording(context)
+                
+                # Send error report to Discord
+                await recorder.send_error_report_to_discord({
+                    "error": f"No auth code found in {len(visited_urls)} visited URLs",
+                    "email": email,
+                    "step": "Microsoft Authentication Flow",
+                    "duration": time.time() - start_time,
+                    "additional_info": f"Final URL: {page.url}"
+                })
+                
+                return None, None
+            
+            # Success case - stop recording but don't send to Discord
+            if context:
+                await recorder.stop_recording(context)
+            logger.info(f"Authentication successful - video recorded but not sent: {video_path}")
+                
             return auth_code, received_state
 
         except Exception as e: 
             logger.error(f"Error during Microsoft authentication flow: {e}")
-            # Uncomment the line below to save a screenshot for debugging on error
-            # await page.screenshot(path="microsoft_auth_error.png")
+            
+            # Stop video recording if context is available
+            if context:
+                await recorder.stop_recording(context)
+            
+            # Send error report to Discord
+            await recorder.send_error_report_to_discord({
+                "error": f"Microsoft authentication flow error: {str(e)}",
+                "email": email,
+                "step": "Microsoft Authentication Flow",
+                "duration": time.time() - start_time,
+                "additional_info": f"URL: {page.url if 'page' in locals() else 'Unknown'}"
+            })
+            
             return None, None
         finally:
             await browser.close()
@@ -439,10 +482,16 @@ async def get_web_session_cookies(email: str, password: str) -> Tuple[Optional[D
         Tuple of (session_cookies_dict, auth_code) or (None, None) if failed
     """
     logger.info("Starting web authentication flow...")
+    start_time = time.time()
+    recorder = get_debug_recorder()
 
     async with async_playwright() as playwright:
         browser = await playwright.chromium.launch(headless=True)
         context = await browser.new_context()
+        
+        # Start video recording if enabled
+        video_path = await recorder.start_recording(context)
+        
         page = await context.new_page()
 
         try:
@@ -470,6 +519,17 @@ async def get_web_session_cookies(email: str, password: str) -> Tuple[Optional[D
             auth_code, _ = extract_auth_code_from_url(current_url)
             if not auth_code:
                 logger.error("No authorization code found in final URL")
+                
+                # Stop video recording and send error report to Discord
+                await recorder.stop_recording(context)
+                await recorder.send_error_report_to_discord({
+                    "error": "No authorization code found in final URL",
+                    "email": email,
+                    "step": "Web Authentication Flow",
+                    "duration": time.time() - start_time,
+                    "additional_info": f"Final URL: {current_url}"
+                })
+                
                 return None, None
 
             logger.info(f"Successfully obtained auth code: {auth_code[:30]}...")
@@ -484,10 +544,25 @@ async def get_web_session_cookies(email: str, password: str) -> Tuple[Optional[D
 
             logger.info(f"Captured {len(session_cookies)} session cookies")
             
+            # Success case - stop recording but don't send to Discord
+            await recorder.stop_recording(context)
+            logger.info(f"Authentication successful - video recorded but not sent: {video_path}")
+            
             return session_cookies, auth_code
 
         except Exception as e:
             logger.error(f"Error during web authentication flow: {e}")
+            
+            # Stop video recording and send error report to Discord
+            await recorder.stop_recording(context)
+            await recorder.send_error_report_to_discord({
+                "error": f"Web authentication flow error: {str(e)}",
+                "email": email,
+                "step": "Web Authentication Flow",
+                "duration": time.time() - start_time,
+                "additional_info": f"URL: {page.url if 'page' in locals() else 'Unknown'}"
+            })
+            
             return None, None
         finally:
             await browser.close()
@@ -601,6 +676,7 @@ async def authenticate_with_credentials(email: str, password: str, auth_type: st
             )
 
             if not auth_code:
+                # Auth code failure already handled in get_microsoft_redirect_code
                 return {
                     "success": False, 
                     "error": "Failed to obtain authorization code from Microsoft"
@@ -631,6 +707,16 @@ async def authenticate_with_credentials(email: str, password: str, auth_type: st
                     "session_type": "mobile",
                 }
             else:
+                # Token exchange failure - send error report to Discord
+                recorder = get_debug_recorder()
+                await recorder.send_error_report_to_discord({
+                    "error": "Failed to exchange authorization code for tokens",
+                    "email": email,
+                    "step": "Token Exchange (Mobile Flow)",
+                    "duration": time.time() - start_time,
+                    "additional_info": f"Auth code length: {len(auth_code) if auth_code else 0}"
+                })
+                
                 return {
                     "success": False, 
                     "error": "Failed to exchange authorization code for tokens"
@@ -638,6 +724,17 @@ async def authenticate_with_credentials(email: str, password: str, auth_type: st
 
         except Exception as e:
             logger.error(f"Authentication error: {e}")
+            
+            # Send error report to Discord
+            recorder = get_debug_recorder()
+            await recorder.send_error_report_to_discord({
+                "error": f"Mobile authentication error: {str(e)}",
+                "email": email,
+                "step": "Mobile Authentication Flow",
+                "duration": time.time() - start_time if 'start_time' in locals() else 0,
+                "additional_info": "High-level mobile auth error"
+            })
+            
             return {"success": False, "error": str(e)}
     else:
         return {"success": False, "error": f"Unknown auth_type: {auth_type}. Use 'mobile' or 'web'."}
@@ -749,6 +846,8 @@ async def authenticate_unified_webapp_flow(email: str, password: str) -> Dict[st
         Dictionary with both web session cookies and mobile OAuth2 tokens
     """
     logger.info("Starting unified authentication flow with web.app handling...")
+    start_time = time.time()
+    recorder = get_debug_recorder()
 
     # Generate PKCE parameters for mobile OAuth2 flow
     code_verifier, code_challenge = generate_pkce_challenge()
@@ -761,9 +860,16 @@ async def authenticate_unified_webapp_flow(email: str, password: str) -> Dict[st
     logger.info(f"  State: {state}")
     logger.info(f"  Nonce: {nonce}")
 
+    # Initialize variables for cleanup
+    context = None
+    
     async with async_playwright() as playwright:
         browser = await playwright.chromium.launch(headless=True)
         context = await browser.new_context()
+        
+        # Start video recording if enabled
+        video_path = await recorder.start_recording(context)
+        
         page = await context.new_page()
 
         # Variables to capture auth code during redirect
@@ -888,6 +994,20 @@ async def authenticate_unified_webapp_flow(email: str, password: str) -> Dict[st
 
         except Exception as e:
             logger.error(f"Error during unified authentication flow: {e}")
+            
+            # Stop video recording if context is available
+            if context:
+                await recorder.stop_recording(context)
+            
+            # Send error report to Discord
+            await recorder.send_error_report_to_discord({
+                "error": f"Browser authentication failed: {str(e)}",
+                "email": email,
+                "step": "Browser Authentication (WebApp Flow)",
+                "duration": time.time() - start_time,
+                "additional_info": f"URL: {page.url if 'page' in locals() else 'Unknown'}"
+            })
+            
             return {
                 "success": False, 
                 "error": f"Unified authentication failed: {str(e)}"
@@ -901,6 +1021,15 @@ async def authenticate_unified_webapp_flow(email: str, password: str) -> Dict[st
         access_token, refresh_token = await exchange_code_for_tokens(auth_code, code_verifier)
         
         if not access_token:
+            # Send error report to Discord
+            await recorder.send_error_report_to_discord({
+                "error": "Token exchange failed - invalid authorization code",
+                "email": email,
+                "step": "Token Exchange (WebApp Flow)",
+                "duration": time.time() - start_time,
+                "additional_info": f"Auth code length: {len(auth_code) if auth_code else 0}"
+            })
+            
             return {
                 "success": False, 
                 "error": "Failed to exchange authorization code for OAuth2 tokens"
@@ -910,10 +1039,23 @@ async def authenticate_unified_webapp_flow(email: str, password: str) -> Dict[st
 
     except Exception as e:
         logger.error(f"Token exchange failed: {e}")
+        
+        # Send error report to Discord
+        await recorder.send_error_report_to_discord({
+            "error": f"Token exchange error: {str(e)}",
+            "email": email,
+            "step": "Token Exchange (WebApp Flow)",
+            "duration": time.time() - start_time,
+            "additional_info": f"Auth code available: {auth_code is not None}"
+        })
+        
         return {
             "success": False, 
             "error": f"Token exchange failed: {str(e)}"
         }
+
+    # Authentication successful - log success but don't send to Discord
+    logger.info(f"Authentication successful - video recorded but not sent: {video_path}")
 
     return {
         "success": True,
@@ -944,7 +1086,9 @@ async def authenticate_unified(email: str, password: str) -> Dict[str, Any]:
         Dictionary with both web session cookies and mobile OAuth2 tokens
     """
     logger.info("Starting unified authentication with navigation listener...")
-
+    start_time = time.time()
+    recorder = get_debug_recorder()
+    
     # Generate PKCE parameters for mobile OAuth2 flow
     code_verifier, code_challenge = generate_pkce_challenge()
     state = generate_random_string(32)
@@ -956,9 +1100,16 @@ async def authenticate_unified(email: str, password: str) -> Dict[str, Any]:
     logger.info(f"  State: {state}")
     logger.info(f"  Nonce: {nonce}")
 
+    # Initialize variables for cleanup
+    context = None
+    
     async with async_playwright() as playwright:
         browser = await playwright.chromium.launch(headless=True)
         context = await browser.new_context()
+        
+        # Start video recording if enabled
+        video_path = await recorder.start_recording(context)
+        
         page = await context.new_page()
 
         # Variables to capture auth code during navigation
@@ -1063,6 +1214,20 @@ async def authenticate_unified(email: str, password: str) -> Dict[str, Any]:
 
         except Exception as e:
             logger.error(f"Error during unified authentication: {e}")
+            
+            # Stop video recording if context is available
+            if context:
+                await recorder.stop_recording(context)
+            
+            # Send error report to Discord
+            await recorder.send_error_report_to_discord({
+                "error": f"Browser authentication failed: {str(e)}",
+                "email": email,
+                "step": "Browser Authentication", 
+                "duration": time.time() - start_time,
+                "additional_info": f"URL: {page.url if 'page' in locals() else 'Unknown'}"
+            })
+            
             return {"success": False, "error": f"Authentication failed: {str(e)}"}
         finally:
             await browser.close()
@@ -1072,12 +1237,43 @@ async def authenticate_unified(email: str, password: str) -> Dict[str, Any]:
         access_token, refresh_token = await exchange_code_for_tokens(auth_code, code_verifier)
         
         if not access_token:
+            # Stop video recording if context is available
+            if context:
+                await recorder.stop_recording(context)
+            
+            # Send error report to Discord
+            await recorder.send_error_report_to_discord({
+                "error": "Token exchange failed - invalid authorization code",
+                "email": email,
+                "step": "Token Exchange",
+                "duration": time.time() - start_time,
+                "additional_info": f"Auth code length: {len(auth_code) if auth_code else 0}"
+            })
+            
             return {"success": False, "error": "Token exchange failed"}
-        # Do NOT return here! Let it continue to the DB save code below.
 
     except Exception as e:
         logger.error(f"Token exchange error: {e}")
+        
+        # Stop video recording if context is available
+        if context:
+            await recorder.stop_recording(context)
+        
+        # Send error report to Discord
+        await recorder.send_error_report_to_discord({
+            "error": f"Token exchange error: {str(e)}",
+            "email": email,
+            "step": "Token Exchange",
+            "duration": time.time() - start_time,
+            "additional_info": f"Auth code available: {auth_code is not None}"
+        })
+        
         return {"success": False, "error": f"Token exchange failed: {str(e)}"}
+
+    # Authentication successful - stop recording but don't send to Discord
+    if context:
+        await recorder.stop_recording(context)
+    logger.info(f"Authentication successful - video recorded but not sent: {video_path}")
 
     return {
         "success": True,

@@ -17,6 +17,8 @@ SchulwareAPI is a unified FastAPI application that provides access to Schulnetz 
   - `SCHULNETZ_API_BASE_URL`: Base URL for the Schulnetz API
   - `SCHULNETZ_WEB_BASE_URL`: Base URL for web scraping
   - `SCHULNETZ_CLIENT_ID`: Client ID for API access
+  - `DEBUG_VIDEO_RECORDING`: Enable video recording during authentication (true/false)
+  - `DISCORD_WEBHOOK_URL`: Discord webhook URL for error reporting (optional)
 
 ### Dependencies
 - Install: `pip install -r requirements.txt`
@@ -69,6 +71,11 @@ Controllers use `SchulwareAPIRouter` which auto-generates paths:
 - **Peewee**: Lightweight ORM for SQLite database
 - **SlowAPI**: Rate limiting middleware
 - **Uvicorn**: ASGI server for production
+
+## Debug & Error Reporting
+- **Video Recording**: Automatic recording of authentication sessions when `DEBUG_VIDEO_RECORDING=true`
+- **Discord Integration**: Error reports with video attachments sent to Discord webhook on authentication failures
+- **Trace Files**: Playwright trace files (`.zip`) include screenshots, network logs, and timeline data
 
 ## Testing
 - Test files located in `src/tests/`
