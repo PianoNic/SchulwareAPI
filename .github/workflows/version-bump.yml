@@ -84,4 +84,4 @@ jobs:
           NEW_VERSION="${{ steps.new_version.outputs.NEW_VERSION }}"
           git add application.properties
           git commit -m "⬆️ Bump version to $NEW_VERSION [skip ci]"
-          git push
+          git push origin HEAD:main
