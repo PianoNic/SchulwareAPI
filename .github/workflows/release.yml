@@ -30,7 +30,24 @@ jobs:
       - name: Update application.properties and commit
         run: |
           VERSION="${{ steps.get_version.outputs.VERSION }}"
-          echo "Updating version to: $VERSION"
+          echo "Target version: $VERSION"
+          
+          # Check current version in application.properties
+          CURRENT_VERSION=""
+          if [ -f application.properties ]; then
+            CURRENT_VERSION=$(grep "^APP_VERSION=" application.properties | cut -d'=' -f2)
+            echo "Current version in application.properties: $CURRENT_VERSION"
+          else
+            echo "application.properties does not exist"
+          fi
+          
+          # Skip if versions match
+          if [ "$CURRENT_VERSION" = "$VERSION" ]; then
+            echo "Version is already $VERSION, skipping update"
+            exit 0
+          fi
+          
+          echo "Updating version from $CURRENT_VERSION to $VERSION"
           
           if [ -f application.properties ]; then
             sed -i "s/^APP_VERSION=.*/APP_VERSION=$VERSION/" application.properties
@@ -42,6 +59,12 @@ jobs:
           
           echo "Updated application.properties:"
           cat application.properties
+          
+          # Check if there are any changes to commit
+          if git diff --quiet application.properties; then
+            echo "No changes to commit"
+            exit 0
+          fi
           
           git add application.properties
           git commit -m "Release version $VERSION [skip ci]"
