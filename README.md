@@ -89,3 +89,6 @@ This project is licensed under the MIT License. See [LICENSE](LICENSE) for detai
 
 ---
 <p align="center">Made with ❤️ by <a href="https://github.com/PianoNic">PianoNic</a></p>
+<p align="center">
+  <a href="https://buymeacoffee.com/pianonic"><img src="https://img.shields.io/badge/-buy_me_a%C2%A0coffee-gray?logo=buy-me-a-coffee" alt="Buy Me A Coffee"/></a>
+</p>
