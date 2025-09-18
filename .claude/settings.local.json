@@ -1,17 +1,7 @@
 {
   "permissions": {
     "allow": [
-      "Bash(tree:*)",
-      "Bash(python:*)",
-      "Bash(del test_state_validation.py)",
-      "Bash(find:*)",
-      "Bash(for:*)",
-      "Bash(do)",
-      "Bash(if ! grep -q \"logger = get_logger()\" \"$file\")",
-      "Bash(then)",
-      "Bash(sed:*)",
-      "Bash(fi)",
-      "Bash(done)"
+      "Bash(python:*)"
     ],
     "deny": [],
     "ask": []

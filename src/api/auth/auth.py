@@ -685,11 +685,11 @@ async def get_microsoft_redirect_code(email: str, password: str, state: str, cod
 async def exchange_code_for_tokens(auth_code: str, code_verifier: str) -> Tuple[Optional[str], Optional[str]]:
     """
     Exchange authorization code for access and refresh tokens.
-    
+
     Args:
         auth_code: Authorization code obtained from Microsoft
         code_verifier: PKCE code verifier used in the initial request
-        
+
     Returns:
         Tuple of (access_token, refresh_token) or (None, None) if failed
     """
@@ -728,7 +728,7 @@ async def exchange_code_for_tokens(auth_code: str, code_verifier: str) -> Tuple[
     logger.info(f"Auth code (first 50 chars): {auth_code[:50]}...")
     logger.info(f"Code verifier length: {len(code_verifier)}")
     logger.info(f"Client ID: {SCHULNETZ_CLIENT_ID}")
-    
+
     try:
         token_response = await httpx_client.post(
             token_url, data=token_data, headers=headers_for_token_exchange
@@ -738,7 +738,7 @@ async def exchange_code_for_tokens(auth_code: str, code_verifier: str) -> Tuple[
 
         access_token = token_json.get("access_token")
         refresh_token = token_json.get("refresh_token")
-        
+
         if access_token:
             logger.info("Token exchange successful")
             return access_token, refresh_token
@@ -755,6 +755,90 @@ async def exchange_code_for_tokens(auth_code: str, code_verifier: str) -> Tuple[
         return None, None
     finally:
         await httpx_client.aclose()
+
+
+async def exchange_authorization_code_direct(auth_code: str, code_verifier: Optional[str] = None, auth_type: str = "mobile") -> Dict[str, Any]:
+    """
+    Exchange authorization code for tokens without using Playwright.
+    This function is used when the authorization code is already obtained through external means.
+
+    Args:
+        auth_code: Authorization code from Microsoft OAuth callback
+        code_verifier: PKCE code verifier (required for mobile flow)
+        auth_type: Type of authentication - "mobile" or "web"
+
+    Returns:
+        Dictionary with authentication result
+    """
+    try:
+        logger.info(f"Direct token exchange for {auth_type} authentication")
+        logger.info(f"Auth code received: {auth_code[:30]}... (length: {len(auth_code)})")
+
+        if auth_type == "mobile":
+            # Mobile flow requires PKCE code verifier
+            if not code_verifier:
+                return {
+                    "success": False,
+                    "error": "Code verifier is required for mobile authentication"
+                }
+
+            # Exchange authorization code for tokens
+            access_token, refresh_token = await exchange_code_for_tokens(auth_code, code_verifier)
+
+            if access_token:
+                logger.info("Successfully exchanged authorization code for mobile tokens")
+                return {
+                    "success": True,
+                    "access_token": access_token,
+                    "refresh_token": refresh_token,
+                    "session_type": "mobile",
+                    "message": "Mobile authentication successful"
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": "Failed to exchange authorization code for tokens"
+                }
+
+        elif auth_type == "web":
+            # Web flow - simpler, mainly for verification
+            # In a real web flow, cookies would be handled by the browser
+            logger.info("Web authentication callback processed")
+
+            # We can still try to exchange if a code_verifier is somehow available
+            # But typically web flow doesn't use PKCE
+            if code_verifier:
+                access_token, refresh_token = await exchange_code_for_tokens(auth_code, code_verifier)
+                if access_token:
+                    return {
+                        "success": True,
+                        "access_token": access_token,
+                        "refresh_token": refresh_token,
+                        "session_type": "web",
+                        "message": "Web authentication successful with tokens"
+                    }
+
+            # For web flow without PKCE, we just acknowledge the code
+            return {
+                "success": True,
+                "auth_code": auth_code,
+                "session_type": "web",
+                "message": "Web authentication code received",
+                "note": "Session cookies should be handled by the browser"
+            }
+
+        else:
+            return {
+                "success": False,
+                "error": f"Unknown authentication type: {auth_type}"
+            }
+
+    except Exception as e:
+        logger.error(f"Error in direct authorization code exchange: {e}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
 
 
 def validate_state_parameter(expected_state: str, received_state: Optional[str]) -> bool:
@@ -1748,6 +1832,58 @@ async def authenticate_with_existing_session(session_cookies: Dict[str, str], au
             "error": f"Session validation error: {str(e)}",
             "requires_full_auth": True
         }
+
+def generate_oauth_url(auth_type: str = "mobile", redirect_uri: str = "") -> Dict[str, str]:
+    """
+    Generate OAuth authorization URL for Microsoft login.
+
+    Args:
+        auth_type: Type of authentication - "mobile" or "web"
+        redirect_uri: Redirect URI for OAuth callback (empty string for Schulnetz default)
+
+    Returns:
+        Dictionary containing:
+        - auth_url: The authorization URL to redirect to
+        - code_verifier: PKCE code verifier (mobile only, client must store this)
+        - state: The state parameter for CSRF protection
+    """
+    # Generate PKCE parameters for mobile flow
+    code_verifier, code_challenge = generate_pkce_challenge() if auth_type == "mobile" else (None, None)
+    state = generate_random_string(32)
+    nonce = generate_random_string(32)
+
+    # Generate authorization parameters
+    auth_params = {
+        "response_type": "code",
+        "client_id": SCHULNETZ_CLIENT_ID,
+        "state": state,
+        "redirect_uri": redirect_uri,
+        "scope": "openid ",  # Note the trailing space as in original
+        "nonce": nonce
+    }
+
+    # Add PKCE parameters for mobile flow
+    if auth_type == "mobile" and code_challenge:
+        auth_params["code_challenge"] = code_challenge
+        auth_params["code_challenge_method"] = "S256"
+
+    # Build authorization URL
+    auth_url = "https://schulnetz.bbbaden.ch/authorize.php?" + urlencode(auth_params)
+
+    logger.info(f"Generated OAuth URL for {auth_type} authentication")
+    logger.info(f"Auth URL: {auth_url[:100]}...")
+
+    result = {
+        "auth_url": auth_url,
+        "state": state
+    }
+
+    # Include code_verifier for mobile (client must store this)
+    if auth_type == "mobile" and code_verifier:
+        result["code_verifier"] = code_verifier
+
+    return result
+
 
 def extract_navigation_urls(html_content: str) -> dict:
     """
