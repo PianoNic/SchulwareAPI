@@ -11,11 +11,11 @@ class GradeDto(BaseModel):
     subjectToken: str
     title: str
     date: str
-    mark: str
+    mark: Optional[str] = None
     points: Optional[str] = None
     weight: str
     isConfirmed: bool
-    courseGrade: str
+    courseGrade: Optional[str] = None
     examinationGroups: ExaminationGroupsDto
     studentId: Optional[str] = None
     studentName: Optional[str] = None
