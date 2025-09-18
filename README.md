@@ -12,6 +12,9 @@
   <a href="#-installation"><img src="https://img.shields.io/badge/Selfhost-Instructions-243aae.svg"/></a>
 </p>
 
+## ⚠️ Disclaimer
+This project is **NOT** affiliated with, endorsed by, or connected to Schulnetz or Centerboard AG in any way. This is an independent, unofficial API wrapper that provides a unified interface to interact with their existing systems.
+
 ## ⚙️ About The Project
 SchulwareAPI is a unified API designed for Schulnetz systems, simplifying data access through dynamic routing. It allows access to data via mobile REST or web scraping and includes interactive Swagger UI for automatic documentation, making API understanding easier.
 
@@ -62,15 +65,14 @@ services:
       - .env
     volumes:
       - ./db:/app/db              # Database storage
-      - ./debug_video:/app/debug_video  # Debug video recordings
     restart: unless-stopped
     init: true  # Recommended to avoid zombie processes
     ipc: host   # Recommended for Chromium to avoid memory crashes
 ```
 
-**2. Create required directories:**
+**2. Create required directory:**
 ```bash
-mkdir -p db debug_video
+mkdir db
 ```
 
 **3. Start it:**
@@ -81,7 +83,6 @@ The API will be available at [http://localhost:8000](http://localhost:8000).
 
 **Data Persistence:**
 - `./db/` - SQLite database files
-- `./debug_video/` - Authentication debug video recordings (when DEBUG_VIDEO_RECORDING=true)
 
 ## 📜 License
 This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
