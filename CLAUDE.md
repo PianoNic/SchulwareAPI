@@ -73,6 +73,28 @@ Controllers use `SchulwareAPIRouter` which auto-generates paths:
 - **Uvicorn**: ASGI server for production
 
 ## Debug & Error Reporting
+
+### Sentry/GlitchTip Integration
+- **Error Tracking**: Automatic error capture with Sentry SDK integrated with GlitchTip
+- **Performance Monitoring**: Transaction tracking with configurable sampling rates
+- **Context Enrichment**: Automatic capture of request context, user information, and breadcrumbs
+- **Sensitive Data Filtering**: Automatic filtering of passwords, tokens, and API keys
+- **Middleware**: Custom middleware for enhanced error context and slow request detection
+
+### Configuration
+- `SENTRY_DSN`: GlitchTip Data Source Name for error reporting
+- `ENVIRONMENT`: Current environment (development/staging/production)
+- `RELEASE`: Application version for error grouping
+- `SENTRY_SAMPLE_RATE`: Error sampling rate (0.0-1.0)
+- `SENTRY_TRACES_SAMPLE_RATE`: Performance monitoring sample rate
+
+### Features
+- **Authentication Monitoring**: Enhanced error tracking in authentication flows with breadcrumbs
+- **Performance Decorators**: `@monitor_performance()` decorator for critical operations
+- **Request Tracking**: Automatic capture of request method, path, duration, and status
+- **Slow Request Detection**: Alerts for requests taking more than 5 seconds
+
+### Legacy Debug Features
 - **Video Recording**: Automatic recording of authentication sessions when `DEBUG_VIDEO_RECORDING=true`
 - **Discord Integration**: Error reports with video attachments sent to Discord webhook on authentication failures
 - **Trace Files**: Playwright trace files (`.zip`) include screenshots, network logs, and timeline data
