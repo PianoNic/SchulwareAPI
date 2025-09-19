@@ -23,7 +23,7 @@ class UserInfoDto(BaseModel):
     email: str
     emailPrivate: str
     profil1: str
-    profil2: str
+    profil2: Optional[str] = None
     entryDate: str
     exitDate: str
     regularClasses: List[ClassInfoDto] = Field(default_factory=list)
