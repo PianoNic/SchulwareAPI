@@ -6,8 +6,8 @@ class AbsenceDto(BaseModel):
     studentId: str
     dateFrom: str
     dateTo: str
-    hourFrom: str
-    hourTo: str
+    hourFrom: Optional[str] = None
+    hourTo: Optional[str] = None
     subject: Optional[str] = None
     subjectId: Optional[str] = None
     profile: str
@@ -22,8 +22,8 @@ class AbsenceDto(BaseModel):
     excusedDate: Optional[str] = None
     additionalPeriod: int
     statusEAE: str
-    dateEAE: str
+    dateEAE: Optional[str] = None
     statusEAB: str
-    dateEAB: str
+    dateEAB: Optional[str] = None
     commentEAB: Optional[str] = None
-    studentTimestamp: str
+    studentTimestamp: Optional[str] = None
