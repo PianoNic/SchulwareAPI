@@ -12,8 +12,8 @@
   <a href="#-installation"><img src="https://img.shields.io/badge/Selfhost-Instructions-243aae.svg"/></a>
 </p>
 
-## ⚠️ Disclaimer
-This project is **NOT** affiliated with, endorsed by, or connected to Schulnetz or Centerboard AG in any way. This is an independent, unofficial API wrapper that provides a unified interface to interact with their existing systems.
+> [!IMPORTANT]
+> This project is **NOT** affiliated with, endorsed by, or connected to Schulnetz or Centerboard AG in any way. This is an independent, unofficial API wrapper that provides a unified interface to interact with their existing systems.
 
 ## ⚙️ About The Project
 SchulwareAPI is a unified API designed for Schulnetz systems, simplifying data access through dynamic routing. It allows access to data via mobile REST or web scraping and includes interactive Swagger UI for automatic documentation, making API understanding easier.
