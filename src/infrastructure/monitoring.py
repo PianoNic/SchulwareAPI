@@ -14,7 +14,6 @@ def initialize_sentry(
     environment: Optional[str] = None,
     release: Optional[str] = None,
     debug: bool = False,
-    sample_rate: float = 1.0,
     traces_sample_rate: float = 0.1
 ) -> None:
     """
@@ -25,8 +24,7 @@ def initialize_sentry(
         environment: Environment name (development, staging, production)
         release: Release version
         debug: Enable debug mode
-        sample_rate: Error sampling rate (0.0 to 1.0)
-        traces_sample_rate: Transaction sampling rate for performance monitoring
+        traces_sample_rate: Transaction sampling rate for performance monitoring (hardcoded to 10%)
     """
     dsn = dsn or os.getenv("SENTRY_DSN")
 
@@ -42,7 +40,6 @@ def initialize_sentry(
         environment=environment,
         release=release,
         debug=debug,
-        sample_rate=sample_rate,
         traces_sample_rate=traces_sample_rate,
         integrations=[
             FastApiIntegration(

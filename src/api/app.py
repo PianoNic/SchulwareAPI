@@ -21,8 +21,7 @@ initialize_sentry(
     environment=app_config.get_environment(),
     release=app_config.get_version(),
     debug=os.getenv("DEBUG", "false").lower() == "true",
-    sample_rate=float(os.getenv("SENTRY_SAMPLE_RATE", "1.0")),
-    traces_sample_rate=float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.1"))
+    traces_sample_rate=0.1
 )
 
 # Get version and environment from application.properties
