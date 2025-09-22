@@ -17,8 +17,7 @@ SchulwareAPI is a unified FastAPI application that provides access to Schulnetz 
   - `SCHULNETZ_API_BASE_URL`: Base URL for the Schulnetz API
   - `SCHULNETZ_WEB_BASE_URL`: Base URL for web scraping
   - `SCHULNETZ_CLIENT_ID`: Client ID for API access
-  - `DEBUG_VIDEO_RECORDING`: Enable video recording during authentication (true/false)
-  - `DISCORD_WEBHOOK_URL`: Discord webhook URL for error reporting (optional)
+  - `SENTRY_DSN`: (Optional) GlitchTip Data Source Name for error reporting
 
 ### Dependencies
 - Install: `pip install -r requirements.txt`
@@ -72,7 +71,7 @@ Controllers use `SchulwareAPIRouter` which auto-generates paths:
 - **SlowAPI**: Rate limiting middleware
 - **Uvicorn**: ASGI server for production
 
-## Debug & Error Reporting
+## Error Reporting
 
 ### Sentry/GlitchTip Integration
 - **Error Tracking**: Automatic error capture with Sentry SDK integrated with GlitchTip
@@ -93,11 +92,6 @@ Controllers use `SchulwareAPIRouter` which auto-generates paths:
 - **Performance Decorators**: `@monitor_performance()` decorator for critical operations
 - **Request Tracking**: Automatic capture of request method, path, duration, and status
 - **Slow Request Detection**: Alerts for requests taking more than 5 seconds
-
-### Legacy Debug Features
-- **Video Recording**: Automatic recording of authentication sessions when `DEBUG_VIDEO_RECORDING=true`
-- **Discord Integration**: Error reports with video attachments sent to Discord webhook on authentication failures
-- **Trace Files**: Playwright trace files (`.zip`) include screenshots, network logs, and timeline data
 
 ## Testing
 - Test files located in `src/tests/`

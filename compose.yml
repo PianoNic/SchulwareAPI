@@ -12,9 +12,6 @@ services:
       - SCHULNETZ_CLIENT_ID=${SCHULNETZ_CLIENT_ID}
     env_file:
       - .env
-    volumes:
-      - ./db:/app/db              # Database storage
-      - ./debug_video:/app/debug_video  # Debug video recordings
     restart: unless-stopped
     init: true  # Recommended to avoid zombie processes
     ipc: host   # Recommended for Chromium to avoid memory crashes
