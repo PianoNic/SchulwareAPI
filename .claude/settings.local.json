@@ -3,7 +3,8 @@
     "allow": [
       "Bash(python:*)",
       "Bash(pip install:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(del:*)"
     ],
     "deny": [],
     "ask": []

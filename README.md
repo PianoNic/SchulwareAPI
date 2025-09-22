@@ -63,26 +63,16 @@ services:
       - SCHULNETZ_CLIENT_ID=${SCHULNETZ_CLIENT_ID}
     env_file:
       - .env
-    volumes:
-      - ./db:/app/db              # Database storage
     restart: unless-stopped
     init: true  # Recommended to avoid zombie processes
     ipc: host   # Recommended for Chromium to avoid memory crashes
 ```
 
-**2. Create required directory:**
-```bash
-mkdir db
-```
-
-**3. Start it:**
+**2. Start it:**
 ```bash
 docker compose up -d
 ```
 The API will be available at [http://localhost:8000](http://localhost:8000).
-
-**Data Persistence:**
-- `./db/` - SQLite database files
 
 ## 📜 License
 This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
