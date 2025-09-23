@@ -46,11 +46,11 @@ def initialize_sentry(
         integrations=[
             FastApiIntegration(
                 transaction_style="endpoint",
-                failed_request_status_codes={400, 401, 403, 404, 405, 500, 501, 502, 503, 504}
+                failed_request_status_codes={400, 403, 404, 405, 500, 501, 502, 503, 504}
             ),
             StarletteIntegration(
                 transaction_style="endpoint",
-                failed_request_status_codes={400, 401, 403, 404, 405, 500, 501, 502, 503, 504}
+                failed_request_status_codes={400, 403, 404, 405, 500, 501, 502, 503, 504}
             ),
             HttpxIntegration(),
             LoggingIntegration(
@@ -78,6 +78,39 @@ def before_send_filter(event: Dict[str, Any], hint: Dict[str, Any]) -> Optional[
     Returns:
         Modified event or None to drop the event
     """
+    # Drop 401 Unauthorized errors
+    if "exception" in event:
+        exceptions = event.get("exception", {}).get("values", [])
+        for exception in exceptions:
+            # Check if it's an HTTPException with 401 status
+            if exception.get("type") == "HTTPException":
+                mechanism = exception.get("mechanism", {})
+                if mechanism.get("data", {}).get("status_code") == 401:
+                    return None
+
+    # Also check response status code in tags
+    if "tags" in event:
+        tags = event.get("tags", [])
+        for tag in tags:
+            if isinstance(tag, (list, tuple)) and len(tag) == 2:
+                if tag[0] == "response.status_code" and tag[1] == 401:
+                    return None
+            elif isinstance(tag, dict):
+                if tag.get("response.status_code") == 401:
+                    return None
+
+    # Check in context data
+    if "contexts" in event:
+        response_context = event.get("contexts", {}).get("response", {})
+        if response_context.get("status_code") == 401:
+            return None
+
+    # Check HTTP exception context
+    if "contexts" in event:
+        http_exception = event.get("contexts", {}).get("http_exception", {})
+        if http_exception.get("status_code") == 401:
+            return None
+
     if "request" in event and event["request"]:
         request = event["request"]
 
