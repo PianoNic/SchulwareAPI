@@ -20,7 +20,7 @@ initialize_sentry(
     dsn=os.getenv("SENTRY_DSN"),
     environment=app_config.get_environment(),
     release=app_config.get_version(),
-    debug=os.getenv("DEBUG", "false").lower() == "true",
+    debug=app_config.is_debug(),
     traces_sample_rate=0.1
 )
 

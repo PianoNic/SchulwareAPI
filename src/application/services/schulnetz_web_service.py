@@ -1,6 +1,7 @@
 import httpx
 from typing import Optional, Dict, Any
 from src.infrastructure.logging_config import get_logger
+from src.infrastructure.monitoring import monitor_performance, add_breadcrumb, capture_exception
 from src.application.services.env_service import get_env_variable
 from src.application.services.token_service import token_service, ApplicationType
 
@@ -32,15 +33,21 @@ class SchulnetzWebService:
             "sec-ch-ua-platform": '"Windows"'
         }
     
+    @monitor_performance("web.scraping.dashboard")
     async def get_dashboard(self, user_id: str) -> Optional[str]:
         """Get main dashboard HTML"""
+        add_breadcrumb(
+            message="Fetching web dashboard",
+            category="web.scraping",
+            level="info"
+        )
         cookies = self._get_web_session_cookies(user_id)
         headers = self._get_web_headers(user_id)
-        
+
         if not cookies:
             logger.error("No web session cookies found")
             return None
-        
+
         async with httpx.AsyncClient() as client:
             try:
                 response = await client.get(
@@ -51,23 +58,38 @@ class SchulnetzWebService:
                 response.raise_for_status()
                 return response.text
             except Exception as e:
+                capture_exception(
+                    e,
+                    context={
+                        "operation": "get_dashboard",
+                        "user_id": user_id
+                    },
+                    level="error"
+                )
                 logger.error(f"Failed to get dashboard: {e}")
                 return None
     
-    async def get_page(self, user_id: str, page_id: str, 
+    @monitor_performance("web.scraping.page")
+    async def get_page(self, user_id: str, page_id: str,
                       additional_params: Dict[str, str] = None) -> Optional[str]:
         """Get specific page by page ID"""
+        add_breadcrumb(
+            message=f"Fetching web page: {page_id}",
+            category="web.scraping",
+            level="info",
+            data={"page_id": page_id}
+        )
         cookies = self._get_web_session_cookies(user_id)
         headers = self._get_web_headers(user_id)
-        
+
         if not cookies:
             logger.error("No web session cookies found")
             return None
-        
+
         params = {"pageid": page_id}
         if additional_params:
             params.update(additional_params)
-        
+
         async with httpx.AsyncClient() as client:
             try:
                 response = await client.get(
@@ -79,6 +101,15 @@ class SchulnetzWebService:
                 response.raise_for_status()
                 return response.text
             except Exception as e:
+                capture_exception(
+                    e,
+                    context={
+                        "operation": "get_page",
+                        "user_id": user_id,
+                        "page_id": page_id
+                    },
+                    level="error"
+                )
                 logger.error(f"Failed to get page {page_id}: {e}")
                 return None
     

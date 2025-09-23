@@ -38,7 +38,11 @@ class AppConfigService:
     def is_development(self) -> bool:
         """Check if running in development environment"""
         return self.get_environment().lower() == 'development'
-    
+
+    def is_debug(self) -> bool:
+        """Check if debug mode is enabled"""
+        return not self.is_production()
+
     def get_config(self, key: str, default: Optional[str] = None) -> Optional[str]:
         """Get any configuration value"""
         return self._config.get(key, default)

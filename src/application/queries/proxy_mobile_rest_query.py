@@ -4,11 +4,20 @@ from fastapi import HTTPException, Response
 from fastapi.responses import JSONResponse
 import httpx
 from src.application.services.env_service import get_env_variable
+from src.infrastructure.monitoring import monitor_performance, add_breadcrumb, capture_exception
 
+@monitor_performance("mobile.proxy.request")
 async def proxy_mobile_rest_query_async(token: str, target_url_path: str, method: str, query_params: Optional[List[tuple]] = None):
     target_url_path = f"/rest/v1/{target_url_path.lstrip('/')}"
     base_url = get_env_variable("SCHULNETZ_API_BASE_URL")
     target_url = f"{base_url}{target_url_path}"
+
+    add_breadcrumb(
+        message=f"Mobile API proxy: {method} {target_url_path}",
+        category="mobile.proxy",
+        level="info",
+        data={"method": method, "path": target_url_path}
+    )
 
     request_headers = {
         "Referer": "https://schulnetz.web.app/",
@@ -47,21 +56,61 @@ async def proxy_mobile_rest_query_async(token: str, target_url_path: str, method
                 headers={"Content-Type": content_type},
             )
     except httpx.HTTPStatusError as e:
+        capture_exception(
+            e,
+            context={
+                "api_type": "mobile_proxy",
+                "method": method,
+                "path": target_url_path,
+                "status_code": e.response.status_code
+            },
+            level="warning"
+        )
         raise HTTPException(
             status_code=e.response.status_code,
             detail=f"Mobile API error ({e.response.status_code}): {e.response.text}",
         )
     except httpx.RequestError as e:
+        capture_exception(
+            e,
+            context={
+                "api_type": "mobile_proxy",
+                "method": method,
+                "path": target_url_path,
+                "error_type": "network_error"
+            },
+            level="error"
+        )
         raise HTTPException(
             status_code=500,
             detail=f"Network error or mobile API service unavailable: {e}",
         )
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as e:
+        capture_exception(
+            e,
+            context={
+                "api_type": "mobile_proxy",
+                "method": method,
+                "path": target_url_path,
+                "error_type": "json_decode_error"
+            },
+            level="error"
+        )
         raise HTTPException(
             status_code=500,
             detail="Mobile API returned malformed or non-JSON response.",
         )
     except Exception as e:
+        capture_exception(
+            e,
+            context={
+                "api_type": "mobile_proxy",
+                "method": method,
+                "path": target_url_path,
+                "error_type": type(e).__name__
+            },
+            level="error"
+        )
         raise HTTPException(
             status_code=500,
             detail=f"An unexpected mobile API error occurred: {e}",

@@ -12,6 +12,7 @@ from urllib.parse import urlparse, parse_qs, urlencode
 from typing import Optional, Tuple, Dict, Any
 from dotenv import load_dotenv
 from src.infrastructure.logging_config import get_logger
+from src.infrastructure.monitoring import monitor_performance, add_breadcrumb, capture_exception
 from playwright.async_api import async_playwright, Page, expect
 
 # Logger for this module
@@ -60,9 +61,11 @@ def generate_auth_params(state: str, code_challenge: str, nonce: str) -> Dict[st
 async def handle_2fa_input(page: Page) -> None:
     """Handle 2FA token input when required."""
     logger.info("Handling 2FA authentication...")
+    add_breadcrumb(message="Starting 2FA authentication", category="auth.2fa", level="info")
     logger.info("Please provide 2FA token via /2FA endpoint...")
     two_fa_token = await asyncio.wait_for(two_fa_queue.get(), timeout=120)
     logger.info("Received 2FA token")
+    add_breadcrumb(message="2FA token received", category="auth.2fa", level="info")
     
     two_fa_field = 'input[type="tel"], input[name="otc"]'
     await expect(page.locator(two_fa_field)).to_be_visible(timeout=20000)
@@ -399,6 +402,7 @@ async def exchange_code_for_tokens(auth_code: str, code_verifier: str) -> Tuple[
         await httpx_client.aclose()
 
 
+@monitor_performance("auth.exchange_code")
 async def exchange_authorization_code_direct(auth_code: str, code_verifier: Optional[str] = None, auth_type: str = "mobile") -> Dict[str, Any]:
     """
     Exchange authorization code for tokens without using Playwright.
@@ -849,6 +853,7 @@ async def example_mobile_authenticated_request(email: str, password: str):
             logger.error(f"API request failed: {e}")
             return None
 
+@monitor_performance("browser.authenticate.webapp_flow")
 async def authenticate_unified_webapp_flow(email: str, password: str) -> Dict[str, Any]:
     """
     Alternative unified authentication that properly handles the schulnetz.web.app redirect flow.
@@ -1049,6 +1054,7 @@ async def authenticate_unified_webapp_flow(email: str, password: str) -> Dict[st
         "redirect_domain": redirect_domain or "unknown"
     }
 
+@monitor_performance("browser.authenticate.unified")
 async def authenticate_unified(email: str, password: str) -> Dict[str, Any]:
     """
     Unified authentication using navigation listener to capture auth code during redirects.

@@ -7,6 +7,7 @@ from sentry_sdk.integrations.logging import LoggingIntegration
 import logging
 from typing import Optional, Dict, Any
 from functools import wraps
+from src.application.services.app_config_service import app_config
 
 
 def initialize_sentry(
@@ -32,8 +33,9 @@ def initialize_sentry(
         logging.warning("Sentry DSN not configured. Error tracking disabled.")
         return
 
-    environment = environment or os.getenv("ENVIRONMENT", "development")
-    release = release or os.getenv("RELEASE", "unknown")
+    # APP_ENVIRONMENT must ONLY come from application.properties, never from env vars
+    environment = environment or app_config.get_environment()
+    release = release or app_config.get_version()
 
     sentry_sdk.init(
         dsn=dsn,

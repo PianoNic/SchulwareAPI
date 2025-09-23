@@ -82,10 +82,6 @@ Controllers use `SchulwareAPIRouter` which auto-generates paths:
 
 ### Configuration
 - `SENTRY_DSN`: GlitchTip Data Source Name for error reporting
-- `ENVIRONMENT`: Current environment (development/staging/production)
-- `RELEASE`: Application version for error grouping
-- `SENTRY_SAMPLE_RATE`: Error sampling rate (0.0-1.0)
-- `SENTRY_TRACES_SAMPLE_RATE`: Performance monitoring sample rate
 
 ### Features
 - **Authentication Monitoring**: Enhanced error tracking in authentication flows with breadcrumbs
