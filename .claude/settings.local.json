@@ -4,7 +4,8 @@
       "Bash(python:*)",
       "Bash(pip install:*)",
       "Bash(curl:*)",
-      "Bash(del:*)"
+      "Bash(del:*)",
+      "Bash(.venv/Scripts/python.exe asgi.py:*)"
     ],
     "deny": [],
     "ask": []

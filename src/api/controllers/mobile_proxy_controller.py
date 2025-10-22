@@ -9,6 +9,8 @@ from src.application.dtos.mobile.exam_dto import ExamDto
 from src.application.dtos.mobile.absencenotice_dto import AbsenceNoticeDto
 from src.application.dtos.mobile.absencenoticestatus_dto import AbsenceNoticeStatusDto
 from src.application.dtos.mobile.absence_dto import AbsenceDto
+from src.application.dtos.mobile.absenz_dto import AbsenzDto
+from src.application.dtos.mobile.meldung_dto import MeldungDto
 from src.application.dtos.mobile.agenda_dto import AgendaDto
 from src.application.dtos.mobile.setting_dto import SettingDto
 from src.application.dtos.mobile.user_info_dto import UserInfoDto
@@ -32,12 +34,23 @@ async def get_mobile_events(token: str = Depends(get_current_token), min_date: O
     query_params = [("min_date", min_date), ("max_date", max_date)]
     return await proxy_mobile_rest_query_async(token, "me/events", "GET", query_params=query_params)
 
-@router.get("absences", dependencies=[Depends(security)], response_model=List[AbsenceDto])
+@router.get("absences", dependencies=[Depends(security)], response_model=List[AbsenzDto])
 async def get_mobile_absences(token: str = Depends(get_current_token)):
-    return await proxy_mobile_rest_query_async(token, "me/absences", "GET")
+    """Get all absences (Absenzen) - filtered to only include records with a reason"""
+    all_absences = await proxy_mobile_rest_query_async(token, "me/absences", "GET")
+    # Filter to only include absences that have a reason (regular Absenzen)
+    return [absence for absence in all_absences if absence.get("reason")]
+
+@router.get("meldungen", dependencies=[Depends(security)], response_model=List[MeldungDto])
+async def get_mobile_meldungen(token: str = Depends(get_current_token)):
+    """Get all Meldungen - filtered to only include records without a reason"""
+    all_absences = await proxy_mobile_rest_query_async(token, "me/absences", "GET")
+    # Filter to only include absences without a reason (Meldungen)
+    return [absence for absence in all_absences if not absence.get("reason")]
 
 @router.get("absencenotices", dependencies=[Depends(security)], response_model=List[AbsenceNoticeDto])
 async def get_mobile_absence_notices(token: str = Depends(get_current_token)):
+    """Get detailed absence notices for individual lessons"""
     return await proxy_mobile_rest_query_async(token, "me/absencenotices", "GET")
 
 @router.get("absencenoticestatus", dependencies=[Depends(security)], response_model=List[AbsenceNoticeStatusDto])
