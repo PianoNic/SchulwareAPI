@@ -1,4 +1,4 @@
 from pydantic import BaseModel
 
 class StudentIdCardDto(BaseModel):
-    html: str
+    html: str | None = None
