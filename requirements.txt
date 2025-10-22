@@ -7,6 +7,6 @@ python-multipart
 colorlog
 beautifulsoup4
 peewee
-pyjwt
+pyjwt[crypto]
 slowapi
 sentry-sdk[fastapi]

@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  # SchulwareAPI - Main FastAPI application
+  api:
+    build: .
+    container_name: schulware-api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./db:/app/db
+      - ./.env:/app/.env
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+    depends_on:
+      - ntfy
+    networks:
+      - schulware-network
+
+  # ntfy - Self-hosted push notification server
+  ntfy:
+    image: binwiederhier/ntfy:latest
+    container_name: schulware-ntfy
+    command:
+      - serve
+    ports:
+      - "8080:80"
+    volumes:
+      - ./ntfy-cache:/var/cache/ntfy
+      - ./ntfy-config:/etc/ntfy
+    environment:
+      - TZ=UTC
+      - NTFY_BASE_URL=http://localhost:8080
+      - NTFY_CACHE_FILE=/var/cache/ntfy/cache.db
+      - NTFY_AUTH_FILE=/var/cache/ntfy/auth.db
+      # Uncomment below for production with authentication:
+      # - NTFY_AUTH_DEFAULT_ACCESS=deny-all
+      - NTFY_BEHIND_PROXY=false
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --tries=1 http://localhost:80/v1/health -O - | grep -Eo '\"healthy\"\\s*:\\s*true' || exit 1"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - schulware-network
+
+networks:
+  schulware-network:
+    driver: bridge
+
+volumes:
+  ntfy-cache:
+  ntfy-config:

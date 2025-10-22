@@ -3,12 +3,13 @@ from src.application.dtos.auth_dto import MobileSessionDto, WebSessionDto
 from src.infrastructure.database import database
 from src.domain.user import User
 from src.domain.auth import MobileSession, WebSession, WebUrl
+from src.domain.device import Device
 from src.infrastructure.logging_config import get_logger
 
 # Logger for this module
 logger = get_logger("database")
 
-ALL_MODELS = [User, MobileSession, WebSession, WebUrl]
+ALL_MODELS = [User, MobileSession, WebSession, WebUrl, Device]
 
 def setup_db():
     database.bind(ALL_MODELS, bind_refs=False, bind_backrefs=False)
