@@ -1,4 +1,4 @@
-from fastapi import Form, Request, HTTPException, Response
+from fastapi import Form, Request, HTTPException
 from src.application.commands.authenticate_mobile_command import authenticate_mobile_command_async
 from src.application.commands.authenticate_web_command import authenticate_web_command_async
 from src.application.commands.authenticate_unified_command import authenticate_unified_command_async
@@ -7,9 +7,7 @@ from src.api.auth.auth import generate_oauth_url
 from src.application.dtos.auth_oauth_dtos import (
     MobileOAuthUrlResponseDto,
     MobileCallbackRequestDto,
-    MobileCallbackResponseDto,
-    WebCallbackRequestDto,
-    WebCallbackResponseDto
+    MobileCallbackResponseDto
 )
 from src.application.dtos.authenticate_dtos import (
     AuthenticateRequestDto,

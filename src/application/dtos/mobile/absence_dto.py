@@ -2,28 +2,28 @@ from pydantic import BaseModel
 from typing import Optional
 
 class AbsenceDto(BaseModel):
-    id: str
-    studentId: str
-    dateFrom: str
-    dateTo: str
-    hourFrom: Optional[str] = None
-    hourTo: Optional[str] = None
-    subject: Optional[str] = None
-    subjectId: Optional[str] = None
-    profile: str
-    profileId: str
-    lessons: str
-    reason: str
-    category: str
-    comment: str
-    remark: Optional[str] = None
-    isAcknowledged: bool
-    isExcused: bool
-    excusedDate: Optional[str] = None
-    additionalPeriod: int
-    statusEAE: str
-    dateEAE: Optional[str] = None
-    statusEAB: str
-    dateEAB: Optional[str] = None
-    commentEAB: Optional[str] = None
-    studentTimestamp: Optional[str] = None
+    id: str | None = None
+    studentId: str | None = None
+    dateFrom: str | None = None
+    dateTo: str | None = None
+    hourFrom: str | None = None
+    hourTo: str | None = None
+    subject: str | None = None
+    subjectId: str | None = None
+    profile: str | None = None
+    profileId: str | None = None
+    lessons: str | None = None
+    reason: str | None = None
+    category: str | None = None
+    comment: str | None = None
+    remark: str | None = None
+    isAcknowledged: bool | None = None
+    isExcused: bool | None = None
+    excusedDate: str | None = None
+    additionalPeriod: int | None = None
+    statusEAE: str | None = None
+    dateEAE: str | None = None
+    statusEAB: str | None = None
+    dateEAB: str | None = None
+    commentEAB: str | None = None
+    studentTimestamp: str | None = None
