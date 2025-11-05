@@ -10,3 +10,6 @@ peewee
 pyjwt
 slowapi
 sentry-sdk[fastapi]
+pytest 
+pytest-cov
+pytest-asyncio
