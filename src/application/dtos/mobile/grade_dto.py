@@ -3,21 +3,23 @@ from pydantic import BaseModel
 from src.application.dtos.mobile.examination_groups_dto import ExaminationGroupsDto
 
 class GradeDto(BaseModel):
-    id: str | None = None
-    course: str | None = None
-    courseId: str | None = None
-    courseType: str | None = None
-    subject: str | None = None
-    subjectToken: str | None = None
-    title: str | None = None
-    date: str | None = None
-    mark: str | None = None
-    points: str | None = None
-    weight: str | None = None
-    isConfirmed: bool | None = None
-    courseGrade: str | None = None
-    examinationGroups: ExaminationGroupsDto | None = None
-    studentId: str | None = None
-    studentName: str | None = None
-    inputType: str | None = None
-    comment: str | None = None
+    id: Optional[str] = None
+    course: Optional[str] = None
+    courseId: Optional[str] = None
+    courseType: Optional[str] = None
+    examId: Optional[str] = None
+    subject: Optional[str] = None
+    subjectToken: Optional[str] = None
+    title: Optional[str] = None
+    date: Optional[str] = None
+    mark: Optional[float] = None
+    points: Optional[float] = None
+    weight: Optional[float] = None
+    isConfirmed: Optional[bool] = None
+    isConfirmedByTrainer: Optional[bool] = None
+    courseGrade: Optional[float] = None
+    examinationGroups: Optional[ExaminationGroupsDto] = None
+    studentId: Optional[str] = None
+    studentName: Optional[str] = None
+    inputType: Optional[str] = None
+    comment: Optional[str] = None

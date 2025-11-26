@@ -2,24 +2,24 @@ from typing import Optional
 from pydantic import BaseModel
 
 class AbsenceNoticeDto(BaseModel):
-    id: str | None = None
-    studentId: str | None = None
-    studentReason: str | None = None
-    studentReasonTimestamp: str | None = None
-    studentIs18: bool | None = None
-    date: str | None = None
-    hourFrom: str | None = None
-    hourTo: str | None = None
-    time: str | None = None
-    status: str | None = None
-    statusLong: str | None = None
-    comment: str | None = None
-    isExamLesson: bool | None = None
-    profile: str | None = None
-    course: str | None = None
-    courseId: str | None = None
-    absenceId: str | None = None
-    absenceSemester: int | None = None
-    trainerAcknowledgement: str | None = None
-    trainerComment: str | None = None
-    trainerCommentTimestamp: str | None = None
+    id: Optional[str] = None
+    studentId: Optional[str] = None
+    studentReason: Optional[str] = None
+    studentReasonTimestamp: Optional[str] = None
+    studentIs18: Optional[bool] = None
+    date: Optional[str] = None
+    hourFrom: Optional[str] = None
+    hourTo: Optional[str] = None
+    time: Optional[str] = None
+    status: Optional[str] = None
+    statusLong: Optional[str] = None
+    comment: Optional[str] = None
+    isExamLesson: Optional[bool] = None
+    profile: Optional[str] = None
+    course: Optional[str] = None
+    courseId: Optional[str] = None
+    absenceId: Optional[str] = None
+    absenceSemester: Optional[int] = None
+    trainerAcknowledgement: Optional[str] = None
+    trainerComment: Optional[str] = None
+    trainerCommentTimestamp: Optional[str] = None

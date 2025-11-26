@@ -1,6 +1,7 @@
+from typing import Optional
 from pydantic import BaseModel
 
 class ClassInfoDto(BaseModel):
-    id: str | None = None
-    token: str | None = None
-    semester: str | None = None
+    id: Optional[str] = None
+    token: Optional[str] = None
+    semester: Optional[str] = None

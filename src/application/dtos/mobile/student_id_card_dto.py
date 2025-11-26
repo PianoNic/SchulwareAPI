@@ -1,4 +1,5 @@
+from typing import Optional
 from pydantic import BaseModel
 
 class StudentIdCardDto(BaseModel):
-    html: str | None = None
+    html: Optional[str] = None
