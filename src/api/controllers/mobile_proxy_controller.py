@@ -1,3 +1,5 @@
+from __future__ import annotations
+from typing import Optional
 from fastapi import Query, Depends
 from src.application.dtos.mobile.student_id_card_dto import StudentIdCardDto
 from src.application.dtos.mobile.lateness_dto import LatenessDto
@@ -27,7 +29,7 @@ async def get_mobile_settings(token: str = Depends(get_current_token)):
     return await proxy_mobile_rest_query_async(token, "config/settings", "GET")
 
 @router.get("agenda", dependencies=[Depends(security)], response_model=list[AgendaDto])
-async def get_mobile_events(token: str = Depends(get_current_token), min_date: str | None = Query(None), max_date: str | None = Query(None)):
+async def get_mobile_events(token: str = Depends(get_current_token), min_date: Optional[str] = Query(None), max_date: Optional[str] = Query(None)):
     query_params = [("min_date", min_date), ("max_date", max_date)]
     return await proxy_mobile_rest_query_async(token, "me/events", "GET", query_params=query_params)
 

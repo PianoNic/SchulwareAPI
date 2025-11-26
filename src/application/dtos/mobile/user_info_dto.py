@@ -1,30 +1,31 @@
+from typing import Optional
 from pydantic import BaseModel, Field
 from src.application.dtos.mobile.class_info_dto import ClassInfoDto
 
 class UserInfoDto(BaseModel):
-    id: str | None = None
-    userType: str | None = None
-    idNr: str | None = None
-    lastName: str | None = None
-    firstName: str | None = None
-    loginActive: bool | None = None
-    gender: str | None = None
-    birthday: str | None = None
-    street: str | None = None
-    addressLine2: str | None = None
-    postOfficeBox: str | None = None
-    zip: str | None = None
-    city: str | None = None
-    nationality: str | None = None
-    hometown: str | None = None
-    phone: str | None = None
-    mobile: str | None = None
-    email: str | None = None
-    emailPrivate: str | None = None
-    profil1: str | None = None
-    profil2: str | None = None
-    entryDate: str | None = None
-    exitDate: str | None = None
-    regularClasses: list[ClassInfoDto] | None = None
-    additionalClasses: list[ClassInfoDto] | None = None
+    id: Optional[str] = None
+    userType: Optional[str] = None
+    idNr: Optional[str] = None
+    lastName: Optional[str] = None
+    firstName: Optional[str] = None
+    loginActive: Optional[bool] = None
+    gender: Optional[str] = None
+    birthday: Optional[str] = None
+    street: Optional[str] = None
+    addressLine2: Optional[str] = None
+    postOfficeBox: Optional[str] = None
+    zip: Optional[str] = None
+    city: Optional[str] = None
+    nationality: Optional[str] = None
+    hometown: Optional[str] = None
+    phone: Optional[str] = None
+    mobile: Optional[str] = None
+    email: Optional[str] = None
+    emailPrivate: Optional[str] = None
+    profil1: Optional[str] = None
+    profil2: Optional[str] = None
+    entryDate: Optional[str] = None
+    exitDate: Optional[str] = None
+    regularClasses: Optional[list[ClassInfoDto]] = None
+    additionalClasses: Optional[list[ClassInfoDto]] = None
 

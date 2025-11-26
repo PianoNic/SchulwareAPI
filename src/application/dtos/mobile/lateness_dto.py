@@ -1,16 +1,17 @@
+from typing import Optional
 from pydantic import BaseModel
 from datetime import date, time
 
 class LatenessDto(BaseModel):
-    id: str | None = None
-    dateExcused: date | None = None
-    date: str | None = None
-    startTime: str | None = None
-    endTime: str | None = None
-    duration: str | None = None
-    reason: str | None = None
-    excused: bool | None = None
-    extendedDeadline: int | None = None
-    courseId: str | None = None
-    courseToken: str | None = None
-    comment: str | None = None
+    id: Optional[str] = None
+    dateExcused: Optional[date] = None
+    date: Optional[str] = None
+    startTime: Optional[str] = None
+    endTime: Optional[str] = None
+    duration: Optional[str] = None
+    reason: Optional[str] = None
+    excused: Optional[bool] = None
+    extendedDeadline: Optional[int] = None
+    courseId: Optional[str] = None
+    courseToken: Optional[str] = None
+    comment: Optional[str] = None
