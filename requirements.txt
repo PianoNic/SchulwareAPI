@@ -8,3 +8,8 @@ colorlog
 beautifulsoup4
 peewee
 pyjwt
+slowapi
+sentry-sdk[fastapi]
+pytest 
+pytest-cov
+pytest-asyncio

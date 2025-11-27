@@ -1,0 +1,165 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  update-version:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config --local user.email "79938743+Pianonic@users.noreply.github.com"
+          git config --local user.name "PianoNic"
+
+      - name: Get version from release
+        id: get_version
+        run: |
+          VERSION="${{ github.event.release.tag_name }}"
+          VERSION=${VERSION#v}
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "Release version: $VERSION"
+
+      - name: Update application.properties and commit
+        run: |
+          VERSION="${{ steps.get_version.outputs.VERSION }}"
+          echo "Target version: $VERSION"
+          
+          # Check current version in application.properties
+          CURRENT_VERSION=""
+          if [ -f application.properties ]; then
+            CURRENT_VERSION=$(grep "^APP_VERSION=" application.properties | cut -d'=' -f2)
+            echo "Current version in application.properties: $CURRENT_VERSION"
+          else
+            echo "application.properties does not exist"
+          fi
+          
+          # Skip if versions match
+          if [ "$CURRENT_VERSION" = "$VERSION" ]; then
+            echo "Version is already $VERSION, skipping update"
+            exit 0
+          fi
+          
+          echo "Updating version from $CURRENT_VERSION to $VERSION"
+          
+          if [ -f application.properties ]; then
+            sed -i "s/^APP_VERSION=.*/APP_VERSION=$VERSION/" application.properties
+            sed -i "s/^APP_ENVIRONMENT=.*/APP_ENVIRONMENT=production/" application.properties
+          else
+            echo "APP_VERSION=$VERSION" > application.properties
+            echo "APP_ENVIRONMENT=production" >> application.properties
+          fi
+          
+          echo "Updated application.properties:"
+          cat application.properties
+          
+          # Check if there are any changes to commit
+          if git diff --quiet application.properties; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          
+          git add application.properties
+          git commit -m "Release version $VERSION [skip ci]"
+          git push origin HEAD:main
+
+  build-and-push-docker:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Get version from tag
+        id: get_version
+        run: |
+          VERSION="${{ github.event.release.tag_name }}"
+          VERSION=${VERSION#v}
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "Build version: $VERSION"
+
+      - name: Update application.properties for production build
+        run: |
+          VERSION="${{ steps.get_version.outputs.VERSION }}"
+          echo "Target version: $VERSION"
+
+          # Check current values in application.properties
+          CURRENT_VERSION=""
+          CURRENT_ENV=""
+          if [ -f application.properties ]; then
+            CURRENT_VERSION=$(grep "^APP_VERSION=" application.properties | cut -d'=' -f2 || echo "")
+            CURRENT_ENV=$(grep "^APP_ENVIRONMENT=" application.properties | cut -d'=' -f2 || echo "")
+            echo "Current version: $CURRENT_VERSION"
+            echo "Current environment: $CURRENT_ENV"
+          fi
+
+          # Only update if needed
+          if [ "$CURRENT_VERSION" = "$VERSION" ] && [ "$CURRENT_ENV" = "production" ]; then
+            echo "application.properties already has correct version ($VERSION) and environment (production)"
+          else
+            echo "Updating application.properties for production build"
+
+            if [ -f application.properties ]; then
+              sed -i "s/^APP_VERSION=.*/APP_VERSION=$VERSION/" application.properties
+              sed -i "s/^APP_ENVIRONMENT=.*/APP_ENVIRONMENT=production/" application.properties
+            else
+              echo "APP_VERSION=$VERSION" > application.properties
+              echo "APP_ENVIRONMENT=production" >> application.properties
+            fi
+
+            echo "Updated application.properties:"
+            cat application.properties
+          fi
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/${{ github.event.repository.name }}
+            ghcr.io/${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=raw,value=latest,enable=${{ !github.event.release.prerelease }}
+
+      - name: Build and push Multi-Arch Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

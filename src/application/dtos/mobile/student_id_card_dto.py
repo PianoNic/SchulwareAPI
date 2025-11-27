@@ -1,5 +1,5 @@
-from dataclasses import dataclass
+from typing import Optional
+from pydantic import BaseModel
 
-@dataclass
-class StudentIdCardDto:
-    html: str
+class StudentIdCardDto(BaseModel):
+    html: Optional[str] = None

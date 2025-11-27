@@ -1,32 +1,31 @@
-from dataclasses import dataclass, field
-from typing import Optional, List
+from typing import Optional
+from pydantic import BaseModel, Field
 from src.application.dtos.mobile.class_info_dto import ClassInfoDto
 
-@dataclass
-class UserInfoDto:
-    id: str
-    userType: str
-    idNr: str
-    lastName: str
-    firstName: str
-    loginActive: bool
-    gender: str
-    birthday: str
-    street: str
-    addressLine2: Optional[str]
-    postOfficeBox: Optional[str]
-    zip: str
-    city: str
-    nationality: str
-    hometown: str
-    phone: str
-    mobile: str
-    email: str
-    emailPrivate: str
-    profil1: str
-    profil2: str
-    entryDate: str
-    exitDate: str
-    regularClasses: List[ClassInfoDto] = field(default_factory=list)
-    additionalClasses: List[ClassInfoDto] = field(default_factory=list)
+class UserInfoDto(BaseModel):
+    id: Optional[str] = None
+    userType: Optional[str] = None
+    idNr: Optional[str] = None
+    lastName: Optional[str] = None
+    firstName: Optional[str] = None
+    loginActive: Optional[bool] = None
+    gender: Optional[str] = None
+    birthday: Optional[str] = None
+    street: Optional[str] = None
+    addressLine2: Optional[str] = None
+    postOfficeBox: Optional[str] = None
+    zip: Optional[str] = None
+    city: Optional[str] = None
+    nationality: Optional[str] = None
+    hometown: Optional[str] = None
+    phone: Optional[str] = None
+    mobile: Optional[str] = None
+    email: Optional[str] = None
+    emailPrivate: Optional[str] = None
+    profil1: Optional[str] = None
+    profil2: Optional[str] = None
+    entryDate: Optional[str] = None
+    exitDate: Optional[str] = None
+    regularClasses: Optional[list[ClassInfoDto]] = None
+    additionalClasses: Optional[list[ClassInfoDto]] = None
 

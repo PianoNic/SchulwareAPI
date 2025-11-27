@@ -3,7 +3,10 @@ from src.application.dtos.auth_dto import MobileSessionDto, WebSessionDto
 from src.infrastructure.database import database
 from src.domain.user import User
 from src.domain.auth import MobileSession, WebSession, WebUrl
-from fastapi.logger import logger
+from src.infrastructure.logging_config import get_logger
+
+# Logger for this module
+logger = get_logger("database")
 
 ALL_MODELS = [User, MobileSession, WebSession, WebUrl]
 

@@ -1,7 +1,7 @@
-from dataclasses import dataclass
+from typing import Optional
+from pydantic import BaseModel
 
-@dataclass
-class ClassInfoDto:
-    id: str
-    token: str
-    semester: str
+class ClassInfoDto(BaseModel):
+    id: Optional[str] = None
+    token: Optional[str] = None
+    semester: Optional[str] = None

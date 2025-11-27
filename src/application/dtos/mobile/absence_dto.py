@@ -1,5 +1,29 @@
-from dataclasses import dataclass
+from pydantic import BaseModel
+from typing import Optional
 
-@dataclass
-class AbsenceDto:
-    pass
+class AbsenceDto(BaseModel):
+    id: Optional[str] = None
+    studentId: Optional[str] = None
+    dateFrom: Optional[str] = None
+    dateTo: Optional[str] = None
+    hourFrom: Optional[str] = None
+    hourTo: Optional[str] = None
+    subject: Optional[str] = None
+    subjectId: Optional[str] = None
+    profile: Optional[str] = None
+    profileId: Optional[str] = None
+    lessons: Optional[str] = None
+    reason: Optional[str] = None
+    category: Optional[str] = None
+    comment: Optional[str] = None
+    remark: Optional[str] = None
+    isAcknowledged: Optional[bool] = None
+    isExcused: Optional[bool] = None
+    excusedDate: Optional[str] = None
+    additionalPeriod: Optional[int] = None
+    statusEAE: Optional[str] = None
+    dateEAE: Optional[str] = None
+    statusEAB: Optional[str] = None
+    dateEAB: Optional[str] = None
+    commentEAB: Optional[str] = None
+    studentTimestamp: Optional[str] = None

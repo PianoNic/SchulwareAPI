@@ -1,7 +1,6 @@
-from dataclasses import dataclass
+from pydantic import BaseModel
 
-@dataclass
-class WebUrlsDto:
+class WebUrlsDto(BaseModel):
     start: str
     grades: str
     absent_notices: str

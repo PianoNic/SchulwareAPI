@@ -1,0 +1,88 @@
+name: Version Bump
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump_type:
+        description: 'Version bump type'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+      version:
+        description: 'Specific version (overrides bump_type)'
+        required: false
+        type: string
+
+jobs:
+  bump-version:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config --local user.email "79938743+Pianonic@users.noreply.github.com"
+          git config --local user.name "PianoNic"
+
+      - name: Setup Node.js (for semver)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install semver
+        run: npm install -g semver
+
+      - name: Get current version
+        id: current_version
+        run: |
+          if [ -f application.properties ]; then
+            CURRENT_VERSION=$(grep "^APP_VERSION=" application.properties | cut -d'=' -f2)
+          else
+            CURRENT_VERSION="0.1.0"
+          fi
+          echo "CURRENT_VERSION=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          echo "Current version: $CURRENT_VERSION"
+
+      - name: Calculate new version
+        id: new_version
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            NEW_VERSION="${{ github.event.inputs.version }}"
+          else
+            CURRENT_VERSION="${{ steps.current_version.outputs.CURRENT_VERSION }}"
+            BUMP_TYPE="${{ github.event.inputs.bump_type }}"
+            NEW_VERSION=$(semver -i $BUMP_TYPE $CURRENT_VERSION)
+          fi
+          echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "New version: $NEW_VERSION"
+
+      - name: Update application.properties
+        run: |
+          NEW_VERSION="${{ steps.new_version.outputs.NEW_VERSION }}"
+          echo "Updating version to: $NEW_VERSION"
+
+          if [ -f application.properties ]; then
+            # Only update the version, leave environment unchanged
+            sed -i "s/^APP_VERSION=.*/APP_VERSION=$NEW_VERSION/" application.properties
+          else
+            # Create new file with default values if it doesn't exist
+            echo "APP_VERSION=$NEW_VERSION" > application.properties
+            echo "APP_ENVIRONMENT=development" >> application.properties
+          fi
+
+          echo "Updated application.properties:"
+          cat application.properties
+
+      - name: Commit version bump
+        run: |
+          NEW_VERSION="${{ steps.new_version.outputs.NEW_VERSION }}"
+          git add application.properties
+          git commit -m "Bump version to $NEW_VERSION [skip ci]"
+          git push origin HEAD:main

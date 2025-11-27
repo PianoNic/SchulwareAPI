@@ -1,6 +1,6 @@
-from dataclasses import dataclass
+from typing import Optional
+from pydantic import BaseModel
 
-@dataclass
-class SettingDto:
-    key: str
-    value: str
+class SettingDto(BaseModel):
+    key: Optional[str] = None
+    value: Optional[str] = None

@@ -1,8 +1,7 @@
-from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Optional
+from pydantic import BaseModel
 
-@dataclass
-class ExaminationGroupsDto:
-    examGroup: Optional[Any]
-    weightExamGroup: Optional[Any]
-    averageExamGroup: Optional[Any]
+class ExaminationGroupsDto(BaseModel):
+    examGroup: Optional[str] = None
+    weightExamGroup: Optional[str] = None
+    averageExamGroup: Optional[str] = None

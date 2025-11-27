@@ -1,12 +1,11 @@
-from dataclasses import dataclass
 from typing import Optional
+from pydantic import BaseModel
 
-@dataclass
-class AbsenceNoticeStatusDto:
-    id: str
-    code: str
-    name: str
-    sort: str
+class AbsenceNoticeStatusDto(BaseModel):
+    id: Optional[str] = None
+    code: Optional[str] = None
+    name: Optional[str] = None
+    sort: Optional[str] = None
     comment: Optional[str] = None
     additionalInfo: Optional[str] = None
     iso2: Optional[str] = None

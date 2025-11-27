@@ -1,9 +1,8 @@
-import os
+from src.application.services.app_config_service import app_config
+from src.application.dtos.app_info_dto import AppInfoDto
 
-async def get_app_info_query_async():
-    environment = os.environ.get('APP_ENVIRONMENT', 'unknown environment')
-    version = os.environ.get('APP_VERSION', 'unknown version')
-    return {
-        "environment": environment, 
-        "version": version
-    }
+async def get_app_info_query_async() -> AppInfoDto:
+    return AppInfoDto(
+        version=app_config.get_version(),
+        environment=app_config.get_environment()
+    )

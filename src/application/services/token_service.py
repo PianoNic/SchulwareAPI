@@ -1,9 +1,10 @@
 from typing import Optional, Tuple
 import httpx
-from fastapi import logger
+from src.infrastructure.logging_config import get_logger
 from src.application.services.env_service import get_env_variable
 
-log = logger.logger
+# Logger for this module
+logger = get_logger("token_manager")
 
 class ApplicationType:
     MOBILE_API = "mobile_api"
@@ -43,11 +44,11 @@ class TokenService:
                 if new_access_token:
                     return new_access_token, new_refresh_token
                 else:
-                    log.error("No access token in mobile refresh response")
+                    logger.error("No access token in mobile refresh response")
                     return None, None
                 
             except Exception as e:
-                log.error(f"Failed to refresh mobile token: {e}")
+                logger.error(f"Failed to refresh mobile token: {e}")
                 return None, None
 
 # Global instance
