@@ -2,13 +2,13 @@ from src.application.dtos.web.web_urls_dto import WebUrlsDto
 from src.application.dtos.auth_dto import MobileSessionDto, WebSessionDto
 from src.infrastructure.database import database
 from src.domain.user import User
-from src.domain.auth import MobileSession, WebSession, WebUrl
+from src.domain.auth import WebSession, WebUrl
 from src.infrastructure.logging_config import get_logger
 
 # Logger for this module
 logger = get_logger("database")
 
-ALL_MODELS = [User, MobileSession, WebSession, WebUrl]
+ALL_MODELS = [User, WebSession, WebUrl]
 
 def setup_db():
     database.bind(ALL_MODELS, bind_refs=False, bind_backrefs=False)
@@ -21,32 +21,13 @@ def setup_db():
     database.close()
     logger.info("Database connection closed.")
     
-def create_or_update_user(user_email: str,mobile_session_dto: MobileSessionDto = None, web_session_dto: WebSessionDto = None, web_url_dto: WebUrlsDto=None):
+def create_or_update_user(user_email: str, web_session_dto: WebSessionDto = None, web_url_dto: WebUrlsDto=None):
     if not user_email:
         raise ValueError("user_email cannot be null or empty.")
 
     database.connect()
 
     user, user_created = User.get_or_create(email=user_email)
-
-    if mobile_session_dto is not None:
-        mobile_session, mobile_created = MobileSession.get_or_create(
-            user=user,
-            defaults={
-                'access_token': mobile_session_dto.access_token,
-                'refresh_token': mobile_session_dto.refresh_token,
-                'expires_in': mobile_session_dto.expires_in
-            }
-        )
-
-        if not mobile_created:
-            mobile_session.access_token = mobile_session_dto.access_token
-            mobile_session.refresh_token = mobile_session_dto.refresh_token
-            mobile_session.expires_in = mobile_session_dto.expires_in
-            mobile_session.save()
-            logger.info(f"Updated mobile session for user: {user_email}")
-        else:
-            logger.info(f"Created new mobile session for user: {user_email}")
 
     if web_session_dto is not None:
         web_session, web_created = WebSession.get_or_create(
