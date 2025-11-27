@@ -1299,57 +1299,6 @@ async def authenticate_with_existing_session(session_cookies: Dict[str, str], au
             "requires_full_auth": True
         }
 
-def generate_oauth_url(auth_type: str = "mobile", redirect_uri: str = "") -> Dict[str, str]:
-    """
-    Generate OAuth authorization URL for Microsoft login.
-
-    Args:
-        auth_type: Type of authentication - "mobile" or "web"
-        redirect_uri: Redirect URI for OAuth callback (empty string for Schulnetz default)
-
-    Returns:
-        Dictionary containing:
-        - auth_url: The authorization URL to redirect to
-        - code_verifier: PKCE code verifier (mobile only, client must store this)
-        - state: The state parameter for CSRF protection
-    """
-    # Generate PKCE parameters for mobile flow
-    code_verifier, code_challenge = generate_pkce_challenge() if auth_type == "mobile" else (None, None)
-    state = generate_random_string(32)
-    nonce = generate_random_string(32)
-
-    # Generate authorization parameters
-    auth_params = {
-        "response_type": "code",
-        "client_id": SCHULNETZ_CLIENT_ID,
-        "state": state,
-        "redirect_uri": redirect_uri,
-        "scope": "openid ",  # Note the trailing space as in original
-        "nonce": nonce
-    }
-
-    # Add PKCE parameters for mobile flow
-    if auth_type == "mobile" and code_challenge:
-        auth_params["code_challenge"] = code_challenge
-        auth_params["code_challenge_method"] = "S256"
-
-    # Build authorization URL
-    auth_url = "https://schulnetz.bbbaden.ch/authorize.php?" + urlencode(auth_params)
-
-    logger.info(f"Generated OAuth URL for {auth_type} authentication")
-    logger.info(f"Auth URL: {auth_url[:100]}...")
-
-    result = {
-        "auth_url": auth_url,
-        "state": state
-    }
-
-    # Include code_verifier for mobile (client must store this)
-    if auth_type == "mobile" and code_verifier:
-        result["code_verifier"] = code_verifier
-
-    return result
-
 
 def extract_navigation_urls(html_content: str) -> dict:
     """
