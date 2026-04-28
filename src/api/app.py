@@ -40,7 +40,28 @@ app = FastAPI(
 app.add_middleware(SentryMiddleware)
 app.add_middleware(SentryAsyncContextMiddleware)
 
-# TEMPORARY anyOf/oneOf workaround for Dart code generator compatibility
+def _flatten_any_of_nullable(obj):
+    if isinstance(obj, dict):
+        if "anyOf" in obj and isinstance(obj["anyOf"], list) and len(obj["anyOf"]) == 2:
+            types = obj["anyOf"]
+            null_type = next((t for t in types if t.get("type") == "null"), None)
+            real_type = next((t for t in types if t.get("type") != "null"), None)
+            if null_type and real_type and "type" in real_type:
+                obj.pop("anyOf")
+                obj["type"] = real_type["type"]
+                obj["nullable"] = True
+                for k, v in real_type.items():
+                    if k != "type":
+                        obj[k] = v
+                return obj
+        for v in obj.values():
+            _flatten_any_of_nullable(v)
+    elif isinstance(obj, list):
+        for item in obj:
+            _flatten_any_of_nullable(item)
+    return obj
+
+
 def custom_openapi():
     data = get_openapi(
         title=app.title,
@@ -48,6 +69,7 @@ def custom_openapi():
         description=app.description,
         routes=app.routes,
     )
+    _flatten_any_of_nullable(data)
     if (("components" in data) and ("schemas" in data["components"])
             and ("ValidationError" in data["components"]["schemas"])
             and ("properties" in data["components"]["schemas"]["ValidationError"])
