@@ -1,7 +1,7 @@
 """DTOs for web session endpoints."""
 
 from pydantic import BaseModel, Field
-from typing import Optional, Dict
+from typing import Optional, Dict, Any
 
 
 class WebSessionRequestDto(BaseModel):
@@ -15,17 +15,20 @@ class WebSessionResponseDto(BaseModel):
     success: bool = Field(..., description="Whether session capture was successful")
     session_id: Optional[str] = Field(None, description="PHPSESSID value")
     cookies: Optional[Dict[str, str]] = Field(None, description="All captured session cookies")
+    session_info: Optional[Dict[str, Any]] = Field(None, description="Session parameters (id, transid, navigation_urls)")
     message: Optional[str] = Field(None, description="Status message")
 
 
 class WebScrapeRequestDto(BaseModel):
     """Request DTO for scraping a Schulnetz page."""
-    path: str = Field(default="/index.php", description="Page path to scrape")
-    params: Optional[Dict[str, str]] = Field(None, description="Query parameters (pageid, id, transid)")
+    session_id: str = Field(..., description="PHPSESSID cookie value")
+    page: str = Field(..., description="Page to scrape: home, grades, absences, agenda, lessons, documents, student_id")
+    id: str = Field(..., description="Session id parameter from URL")
+    transid: str = Field(..., description="Transaction id parameter from URL")
 
 
 class WebScrapeResponseDto(BaseModel):
     """Response DTO for scraped page."""
     success: bool
-    html: Optional[str] = None
+    data: Optional[Any] = None
     message: Optional[str] = None

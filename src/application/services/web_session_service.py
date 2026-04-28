@@ -151,13 +151,58 @@ async def validate_session(schulnetz_base_url: str, cookies: Dict[str, str], ses
     return "pageid" in html
 
 
+async def fetch_scheduler_data(schulnetz_base_url: str, cookies: Dict[str, str], session_id: str, transid: str, date: Optional[str] = None) -> Optional[str]:
+    """Fetch timetable/agenda data from the scheduler AJAX endpoint."""
+    from datetime import datetime, timedelta
+
+    if date is None:
+        date = datetime.now().strftime("%Y-%m-%d")
+
+    dt = datetime.strptime(date, "%Y-%m-%d")
+    week_start = (dt - timedelta(days=dt.weekday())).strftime("%Y-%m-%d")
+    week_end = (dt + timedelta(days=6 - dt.weekday())).strftime("%Y-%m-%d")
+
+    url = f"{schulnetz_base_url}/scheduler_processor.php"
+    params = {
+        "view": "week",
+        "curr_date": date,
+        "min_date": week_start,
+        "max_date": week_end,
+        "ansicht": "schueleransicht",
+        "id": session_id,
+        "transid": transid,
+        "pageid": "22202",
+        "timeshift": "-120",
+    }
+
+    headers = {
+        **WEB_HEADERS,
+        "Referer": f"{schulnetz_base_url}/",
+        "Sec-Fetch-Site": "same-origin",
+        "Accept": "text/html, */*; q=0.01",
+        "X-Requested-With": "XMLHttpRequest",
+    }
+
+    async with httpx.AsyncClient(headers=headers, cookies=cookies, follow_redirects=True, timeout=30.0) as client:
+        try:
+            response = await client.get(url, params=params)
+            if response.status_code == 200:
+                return response.text
+            logger.warning(f"Scheduler returned {response.status_code}")
+            return None
+        except Exception as e:
+            logger.error(f"Failed to fetch scheduler data: {e}")
+            return None
+
+
 # Page ID constants for known Schulnetz pages
 PAGE_IDS = {
-    "home": "21111",
-    "absences": "21119",
+    "home": "1",
+    "absences": "21111",
     "agenda": "21200",
     "grades": "21311",
     "lessons": "21355",
     "schedule": "22202",
-    "student_id": "24030",
+    "documents": "24030",
+    "student_id": "50505",
 }
