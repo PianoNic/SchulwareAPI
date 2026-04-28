@@ -1,15 +1,22 @@
-import httpx
 from bs4 import BeautifulSoup
-from typing import List
+from typing import Dict, Optional
 
-async def scrape_ausweis(url: str) -> List[dict]:
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(url)
-    if resp.status_code != 200:
-        raise Exception(f"Failed to fetch {url}: {resp.status_code}")
-    soup = BeautifulSoup(resp.text, "html.parser")
-    # Example: extract ausweis info
-    items = []
-    for div in soup.select("div.ausweis-info"):
-        items.append({"info": div.get_text(strip=True)})
-    return items
+
+def scrape_ausweis(html: str) -> Dict[str, Optional[str]]:
+    soup = BeautifulSoup(html, "html.parser")
+    info = {}
+
+    for table in soup.find_all("table"):
+        for row in table.find_all("tr"):
+            cells = row.find_all("td")
+            if len(cells) >= 2:
+                key = cells[0].get_text(strip=True)
+                value = cells[1].get_text(strip=True)
+                if key:
+                    info[key] = value
+
+    img = soup.find("img", src=lambda s: s and "qr" in s.lower())
+    if img:
+        info["qr_code_url"] = img.get("src")
+
+    return info
