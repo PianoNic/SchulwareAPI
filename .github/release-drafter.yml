@@ -1,5 +1,49 @@
-# Release Drafter config for PianoNicsMusic
 name-template: 'v$RESOLVED_VERSION'
+
+version-resolver:
+  major:
+    labels:
+      - 'breaking'
+  minor:
+    labels:
+      - 'feature'
+      - 'enhancement'
+  patch:
+    labels:
+      - 'bug'
+      - 'refactor'
+  default: patch
+
+autolabeler:
+  - label: 'feature'
+    branch:
+      - '/^feature\//'
+    title:
+      - '/^[Aa]dd/'
+      - '/^[Ii]mplement/'
+      - '/^[Cc]reate/'
+  - label: 'bug'
+    branch:
+      - '/^bug\//'
+      - '/^fix\//'
+      - '/^hotfix\//'
+    title:
+      - '/^[Ff]ix/'
+  - label: 'enhancement'
+    branch:
+      - '/^enhancement\//'
+    title:
+      - '/^[Uu]pdate/'
+      - '/^[Ii]mprove/'
+      - '/^[Uu]pgrade/'
+      - '/^[Pp]in/'
+  - label: 'refactor'
+    branch:
+      - '/^refactor\//'
+    title:
+      - '/^[Rr]efactor/'
+      - '/^[Cc]lean/'
+      - '/^[Mm]igrate/'
 
 categories:
   - title: '🚀 Features'
