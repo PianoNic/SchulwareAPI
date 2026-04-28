@@ -46,13 +46,17 @@ def _flatten_any_of_nullable(obj):
             types = obj["anyOf"]
             null_type = next((t for t in types if t.get("type") == "null"), None)
             real_type = next((t for t in types if t.get("type") != "null"), None)
-            if null_type and real_type and "type" in real_type:
+            if null_type and real_type:
                 obj.pop("anyOf")
-                obj["type"] = real_type["type"]
-                obj["nullable"] = True
-                for k, v in real_type.items():
-                    if k != "type":
-                        obj[k] = v
+                if "$ref" in real_type:
+                    obj["$ref"] = real_type["$ref"]
+                    obj["nullable"] = True
+                elif "type" in real_type:
+                    obj["type"] = real_type["type"]
+                    obj["nullable"] = True
+                    for k, v in real_type.items():
+                        if k != "type":
+                            obj[k] = v
                 return obj
         for v in obj.values():
             _flatten_any_of_nullable(v)
