@@ -38,6 +38,8 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var apiBaseInput: EditText
     private lateinit var schulnetzBaseInput: EditText
+    private lateinit var emailInput: EditText
+    private lateinit var passwordInput: EditText
     private lateinit var loginBtn: Button
     private lateinit var refreshBtn: Button
     private lateinit var clearBtn: Button
@@ -58,6 +60,8 @@ class MainActivity : AppCompatActivity() {
 
         apiBaseInput = field("SchulwareAPI base URL", prefs.getString("api_base", "http://localhost:8000") ?: "")
         schulnetzBaseInput = field("Schulnetz base URL (for refresh)", prefs.getString("schulnetz_base", "https://schulnetz.bbbaden.ch") ?: "")
+        emailInput = field("Email (only for /refresh cold start)", prefs.getString("email", "") ?: "")
+        passwordInput = field("Password (only for /refresh cold start)", "", password = true)
 
         loginBtn = Button(this).apply { text = "1. Login via OAuth" }
         refreshBtn = Button(this).apply { text = "2. Test stateless refresh" }
@@ -77,7 +81,7 @@ class MainActivity : AppCompatActivity() {
 
         val scroll = ScrollView(this).apply { addView(output) }
 
-        listOf(apiBaseInput, schulnetzBaseInput, loginBtn, refreshBtn, clearBtn, webView, scroll)
+        listOf(apiBaseInput, schulnetzBaseInput, emailInput, passwordInput, loginBtn, refreshBtn, clearBtn, webView, scroll)
             .forEach { root.addView(it) }
         setContentView(root)
 
@@ -191,6 +195,8 @@ class MainActivity : AppCompatActivity() {
             val payload = JSONObject().apply {
                 put("schulnetz_base_url", schulnetzBase)
                 prefs.getString("context_state", null)?.let { put("context_state", JSONObject(it)) }
+                emailInput.text.toString().takeIf { it.isNotBlank() }?.let { put("email", it) }
+                passwordInput.text.toString().takeIf { it.isNotBlank() }?.let { put("password", it) }
             }
             val (status, body) = withContext(Dispatchers.IO) {
                 httpPost("$apiBase/api/authenticate/refresh", payload.toString())
@@ -248,15 +254,19 @@ class MainActivity : AppCompatActivity() {
 
     // ----- UI helpers -----
 
-    private fun field(label: String, initial: String): EditText = EditText(this).apply {
+    private fun field(label: String, initial: String, password: Boolean = false): EditText = EditText(this).apply {
         hint = label
         setText(initial)
+        if (password) {
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
     }
 
     private fun persistBaseInputs() {
         prefs.edit()
             .putString("api_base", apiBaseInput.text.toString())
             .putString("schulnetz_base", schulnetzBaseInput.text.toString())
+            .putString("email", emailInput.text.toString())
             .apply()
     }
 
