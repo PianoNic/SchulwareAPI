@@ -12,5 +12,5 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "SchulwareAPITester"
+rootProject.name = "AuthTestApp"
 include(":app")

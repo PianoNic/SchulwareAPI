@@ -40,14 +40,14 @@ jobs:
       - name: Stage APK into test-app/dist/
         run: |
           mkdir -p test-app/dist
-          cp test-app/app/build/outputs/apk/debug/app-debug.apk test-app/dist/SchulwareAPITester-debug.apk
+          cp test-app/app/build/outputs/apk/debug/app-debug.apk test-app/dist/AuthTestApp-debug.apk
           ls -l test-app/dist/
 
       - name: Commit APK back to the repo
         run: |
           git config user.name "PianoNic"
           git config user.email "79938743+PianoNic@users.noreply.github.com"
-          git add test-app/dist/SchulwareAPITester-debug.apk
+          git add test-app/dist/AuthTestApp-debug.apk
           if [ -z "$(git status --porcelain)" ]; then
             echo "APK unchanged."
             exit 0
