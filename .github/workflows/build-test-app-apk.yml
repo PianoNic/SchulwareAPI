@@ -1,0 +1,56 @@
+name: Build test-app APK
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'test-app/**'
+      - '!test-app/dist/**'
+      - '.github/workflows/build-test-app-apk.yml'
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          token: ${{ secrets.MAIN_PUSH_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platforms;android-35 build-tools;35.0.0'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build debug APK
+        working-directory: test-app
+        run: gradle wrapper && ./gradlew assembleDebug --no-daemon
+
+      - name: Stage APK into test-app/dist/
+        run: |
+          mkdir -p test-app/dist
+          cp test-app/app/build/outputs/apk/debug/app-debug.apk test-app/dist/SchulwareAPITester-debug.apk
+          ls -l test-app/dist/
+
+      - name: Commit APK back to the repo
+        run: |
+          git config user.name "PianoNic"
+          git config user.email "79938743+PianoNic@users.noreply.github.com"
+          git add test-app/dist/SchulwareAPITester-debug.apk
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "APK unchanged."
+            exit 0
+          fi
+          git commit -m "Built test-app debug APK from ${{ github.sha }} [skip ci]"
+          git push origin main
