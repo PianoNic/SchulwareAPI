@@ -125,9 +125,16 @@ class MainActivity : AppCompatActivity() {
         webView.loadUrl(url)
     }
 
-    /** Returns true if the URL was a callback we consumed (and we hide the WebView). */
+    /** Returns true if the URL was the FINAL Schulnetz callback we consumed.
+     *
+     * Microsoft also redirects back to Schulnetz with a `code=` query param
+     * (a long MS auth code that Schulnetz consumes internally). Only the
+     * **subsequent** Schulnetz-issued code at `schulnetz.web.app/callback`
+     * is the one we exchange for tokens. Match strictly on that host to
+     * avoid grabbing the intermediate MS code. */
     private fun interceptCallback(uri: Uri): Boolean {
         val code = uri.getQueryParameter("code") ?: return false
+        if (uri.host != "schulnetz.web.app") return false
         val state = uri.getQueryParameter("state")
         webView.visibility = View.GONE
         exchangeCode(code, state)
