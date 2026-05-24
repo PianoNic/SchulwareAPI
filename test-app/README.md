@@ -1,4 +1,4 @@
-# SchulwareAPI Tester
+# Auth Test App
 
 Minimal Android app for hand-testing the stateless `/api/authenticate/refresh`
 endpoint. Tracks `context_state` round-trips in `SharedPreferences` so you can
@@ -7,8 +7,8 @@ verify the stateless contract end to end.
 ## Build
 
 CI builds a debug APK on every push to `test-app/**` and commits it to
-[`dist/SchulwareAPITester-debug.apk`](dist/SchulwareAPITester-debug.apk).
-`adb install dist/SchulwareAPITester-debug.apk` and you're done.
+[`dist/AuthTestApp-debug.apk`](dist/AuthTestApp-debug.apk).
+`adb install dist/AuthTestApp-debug.apk` and you're done.
 
 Locally (needs Android SDK + Java 17):
 
