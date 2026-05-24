@@ -2,6 +2,7 @@ from fastapi import Form, Request, HTTPException
 from src.application.commands.authenticate_mobile_command import authenticate_mobile_command_async
 from src.application.commands.authenticate_web_command import authenticate_web_command_async
 from src.application.commands.authenticate_unified_command import authenticate_unified_command_async
+from src.application.commands.refresh_token_command import refresh_token_command_async
 from src.api.router_registry import SchulwareAPIRouter, shared_limiter
 from src.api.auth.auth import generate_oauth_url
 from src.application.dtos.auth_oauth_dtos import (
@@ -13,6 +14,10 @@ from src.application.dtos.authenticate_dtos import (
     AuthenticateRequestDto,
     AuthenticateMobileResponseDto
 )
+from src.application.dtos.refresh_dtos import (
+    RefreshTokenRequestDto,
+    RefreshTokenResponseDto
+)
 from src.infrastructure.logging_config import get_logger
 
 router = SchulwareAPIRouter()
@@ -22,6 +27,13 @@ logger = get_logger("auth_controller")
 @shared_limiter.limit("1/30seconds")
 async def authenticate_unified_api(request: Request, auth_request: AuthenticateRequestDto):
     return await authenticate_unified_command_async(auth_request.email, auth_request.password)
+
+@router.post("refresh", response_model=RefreshTokenResponseDto)
+@shared_limiter.limit("5/minute")
+async def refresh_token_api(request: Request, refresh_request: RefreshTokenRequestDto):
+    """Stateless token + session refresh. Caller provides `context_state` from a
+    prior call and receives an updated `context_state` to persist."""
+    return await refresh_token_command_async(refresh_request)
 
 @router.post("mobile", response_model=AuthenticateMobileResponseDto)
 @shared_limiter.limit("1/30seconds")
