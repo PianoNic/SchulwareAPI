@@ -38,6 +38,13 @@ async def refresh_token_command_async(request: RefreshTokenRequestDto) -> Refres
     async with async_playwright() as pw:
         browser = await pw.chromium.launch(headless=True)
         try:
+            if request.context_state:
+                cs_cookies = request.context_state.get("cookies", [])
+                domains = sorted({c.get("domain", "") for c in cs_cookies})
+                logger.info("Refresh with context_state: %d cookies across domains %s", len(cs_cookies), domains)
+            else:
+                logger.info("Refresh with NO context_state (cold start)")
+
             context = (
                 await browser.new_context(storage_state=request.context_state)
                 if request.context_state
@@ -51,6 +58,7 @@ async def refresh_token_command_async(request: RefreshTokenRequestDto) -> Refres
             try:
                 await page.goto(request.schulnetz_base_url, wait_until="load", timeout=60_000)
                 current_url = page.url
+                logger.info("After initial navigation, URL is: %s", current_url)
 
                 # SSO session expired → need credentials to re-auth via Microsoft.
                 if "login.microsoftonline.com" in current_url:

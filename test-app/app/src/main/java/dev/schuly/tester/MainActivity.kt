@@ -165,14 +165,22 @@ class MainActivity : AppCompatActivity() {
         for (origin in originsToCheck) {
             val raw = cm.getCookie(origin) ?: continue
             val host = Uri.parse(origin).host ?: continue
+            // Leading-dot domain so the cookie matches subdomains too — Microsoft
+            // SSO bounces through several *.microsoftonline.com hosts.
+            val cookieDomain = if (host.startsWith(".")) host else ".$host"
             raw.split(";").forEach { pair ->
                 val parts = pair.trim().split("=", limit = 2)
                 if (parts.size != 2 || parts[0].isEmpty()) return@forEach
                 cookies.put(JSONObject().apply {
                     put("name", parts[0])
                     put("value", parts[1])
-                    put("domain", host)
+                    put("domain", cookieDomain)
                     put("path", "/")
+                    // SSO chain requires these for cross-origin redirects to keep
+                    // the cookie. Without sameSite=None the auto-login bounce drops them.
+                    put("secure", true)
+                    put("sameSite", "None")
+                    put("httpOnly", true)
                 })
             }
         }
