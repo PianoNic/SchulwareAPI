@@ -17,6 +17,7 @@ class RefreshTokenRequestDto(BaseModel):
     )
     email: Optional[str] = Field(default=None, description="Required only when context_state is missing/expired and Microsoft SSO must be performed.")
     password: Optional[str] = Field(default=None, description="Required only when context_state is missing/expired and Microsoft SSO must be performed.")
+    user_agent: Optional[str] = Field(default=None, description="UA string to replay with. Microsoft binds session cookies to UA; mismatch invalidates the session.")
 
 
 class RefreshTokenResponseDto(BaseModel):

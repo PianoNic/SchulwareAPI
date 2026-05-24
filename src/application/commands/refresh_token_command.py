@@ -40,16 +40,21 @@ async def refresh_token_command_async(request: RefreshTokenRequestDto) -> Refres
         try:
             if request.context_state:
                 cs_cookies = request.context_state.get("cookies", [])
+                cs_origins = request.context_state.get("origins", [])
                 domains = sorted({c.get("domain", "") for c in cs_cookies})
-                logger.info("Refresh with context_state: %d cookies across domains %s", len(cs_cookies), domains)
-            else:
-                logger.info("Refresh with NO context_state (cold start)")
+                logger.info(
+                    "Refresh: %d cookies across %s, %d localStorage origins",
+                    len(cs_cookies), domains, len(cs_origins),
+                )
 
-            context = (
-                await browser.new_context(storage_state=request.context_state)
-                if request.context_state
-                else await browser.new_context()
-            )
+            ctx_kwargs = {}
+            if request.context_state:
+                ctx_kwargs["storage_state"] = request.context_state
+            if request.user_agent:
+                # MS binds session cookies to UA — caller MUST send the same UA the
+                # cookies were captured with, otherwise the SSO replay is rejected.
+                ctx_kwargs["user_agent"] = request.user_agent
+            context = await browser.new_context(**ctx_kwargs)
 
             page = await context.new_page()
             code: Optional[str] = None
@@ -58,7 +63,6 @@ async def refresh_token_command_async(request: RefreshTokenRequestDto) -> Refres
             try:
                 await page.goto(request.schulnetz_base_url, wait_until="load", timeout=60_000)
                 current_url = page.url
-                logger.info("After initial navigation, URL is: %s", current_url)
 
                 # SSO session expired → need credentials to re-auth via Microsoft.
                 if "login.microsoftonline.com" in current_url:

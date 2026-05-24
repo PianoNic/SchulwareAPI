@@ -58,7 +58,7 @@ class MainActivity : AppCompatActivity() {
             setPadding(32, 32, 32, 32)
         }
 
-        apiBaseInput = field("SchulwareAPI base URL", prefs.getString("api_base", "http://localhost:8000") ?: "")
+        apiBaseInput = field("SchulwareAPI base URL", prefs.getString("api_base", "http://localhost:8001") ?: "")
         schulnetzBaseInput = field("Schulnetz base URL", prefs.getString("schulnetz_base", "https://schulnetz.bbbaden.ch") ?: "")
 
         loginBtn = Button(this).apply { text = "1. Login via OAuth (one-time)" }
@@ -69,6 +69,11 @@ class MainActivity : AppCompatActivity() {
             visibility = View.GONE
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
+            settings.databaseEnabled = true
+            // SSO chain crosses origins (Microsoft → Schulnetz). Without this,
+            // 3rd-party cookies set inside redirects are dropped.
+            CookieManager.getInstance().setAcceptCookie(true)
+            CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
         }
 
         output = TextView(this).apply {
@@ -114,7 +119,11 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // origin (scheme://host) → JSON array of {name,value} entries scraped from window.localStorage
+    private val capturedLocalStorage = mutableMapOf<String, String>()
+
     private fun openInWebView(url: String) {
+        capturedLocalStorage.clear()
         webView.visibility = View.VISIBLE
         webView.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
@@ -122,6 +131,24 @@ class MainActivity : AppCompatActivity() {
             }
             override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
                 if (url != null && interceptCallback(Uri.parse(url))) view?.stopLoading()
+            }
+            override fun onPageFinished(view: WebView?, url: String?) {
+                super.onPageFinished(view, url)
+                if (view == null || url == null) return
+                val u = Uri.parse(url)
+                val scheme = u.scheme ?: return
+                val host = u.host ?: return
+                val origin = "$scheme://$host"
+                view.evaluateJavascript(
+                    """(function(){var o=[];try{for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);o.push({name:k,value:localStorage.getItem(k)});}}catch(e){}return JSON.stringify(o);})()"""
+                ) { rawJsResult ->
+                    // evaluateJavascript returns a JSON-encoded JS string: e.g. "\"[{...}]\""
+                    try {
+                        val unwrapped = JSONArray("[${rawJsResult}]").getString(0)
+                        val arr = JSONArray(unwrapped)
+                        if (arr.length() > 0) capturedLocalStorage[origin] = unwrapped
+                    } catch (_: Exception) { /* ignore — origin had no localStorage */ }
+                }
             }
         }
         webView.loadUrl(url)
@@ -153,40 +180,61 @@ class MainActivity : AppCompatActivity() {
      * any user prompt. */
     private fun captureCookiesAsContextState() {
         val cm = CookieManager.getInstance().apply { flush() }
-        // Domains the SSO flow touches. We collect everything the WebView would
-        // send to any of these — that's enough to replay the bounce on the server.
+        // Stash the WebView's UA so /refresh can replay with the same string.
+        prefs.edit().putString("user_agent", webView.settings.userAgentString).apply()
+
+        // Query every plausible origin the SSO chain touches. Android exposes no
+        // "list all cookies" API — getCookie(url) only returns cookies that would
+        // be sent for THAT url. So we union over a wide set of plausible hosts.
         val originsToCheck = listOf(
             "https://schulnetz.bbbaden.ch",
             "https://schulnetz.web.app",
             "https://login.microsoftonline.com",
+            "https://login.microsoft.com",
             "https://login.live.com",
-        )
+            "https://login.windows.net",
+            "https://account.live.com",
+            "https://account.microsoft.com",
+            "https://aadcdn.msauth.net",
+            "https://aadcdn.msftauth.net",
+            "https://device.login.microsoftonline.com",
+            // also probe origins where we observed localStorage during the flow
+        ) + capturedLocalStorage.keys
+
         val cookies = JSONArray()
-        for (origin in originsToCheck) {
+        val seen = mutableSetOf<String>()  // dedupe (domain|name|value)
+        for (origin in originsToCheck.distinct()) {
             val raw = cm.getCookie(origin) ?: continue
             val host = Uri.parse(origin).host ?: continue
-            // Leading-dot domain so the cookie matches subdomains too — Microsoft
-            // SSO bounces through several *.microsoftonline.com hosts.
             val cookieDomain = if (host.startsWith(".")) host else ".$host"
             raw.split(";").forEach { pair ->
                 val parts = pair.trim().split("=", limit = 2)
                 if (parts.size != 2 || parts[0].isEmpty()) return@forEach
+                val key = "$cookieDomain|${parts[0]}|${parts[1]}"
+                if (!seen.add(key)) return@forEach
                 cookies.put(JSONObject().apply {
                     put("name", parts[0])
                     put("value", parts[1])
                     put("domain", cookieDomain)
                     put("path", "/")
-                    // SSO chain requires these for cross-origin redirects to keep
-                    // the cookie. Without sameSite=None the auto-login bounce drops them.
-                    put("secure", true)
-                    put("sameSite", "None")
-                    put("httpOnly", true)
                 })
             }
         }
+
+        // Emit every captured origin's localStorage into the storage_state.origins array.
+        val origins = JSONArray()
+        for ((origin, lsJson) in capturedLocalStorage) {
+            try {
+                origins.put(JSONObject().apply {
+                    put("origin", origin)
+                    put("localStorage", JSONArray(lsJson))
+                })
+            } catch (_: Exception) { /* skip malformed */ }
+        }
+
         val storageState = JSONObject().apply {
             put("cookies", cookies)
-            put("origins", JSONArray())
+            put("origins", origins)
         }
         prefs.edit().putString("context_state", storageState.toString()).apply()
     }
@@ -241,6 +289,8 @@ class MainActivity : AppCompatActivity() {
             val payload = JSONObject().apply {
                 put("schulnetz_base_url", schulnetzBase)
                 prefs.getString("context_state", null)?.let { put("context_state", JSONObject(it)) }
+                // MS binds session cookies to UA — replay with the same UA the WebView used.
+                prefs.getString("user_agent", null)?.let { put("user_agent", it) }
             }
             val (status, body) = withContext(Dispatchers.IO) {
                 httpPost("$apiBase/api/authenticate/refresh", payload.toString())
