@@ -17,6 +17,7 @@ db/
 build/
 develop-eggs/
 dist/
+!test-app/dist/
 downloads/
 eggs/
 .eggs/
