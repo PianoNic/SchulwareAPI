@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.text.method.ScrollingMovementMethod
 import android.view.View
+import android.webkit.CookieManager
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -14,6 +15,7 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import org.json.JSONArray
 import androidx.appcompat.app.AppCompatActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -38,8 +40,6 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var apiBaseInput: EditText
     private lateinit var schulnetzBaseInput: EditText
-    private lateinit var emailInput: EditText
-    private lateinit var passwordInput: EditText
     private lateinit var loginBtn: Button
     private lateinit var refreshBtn: Button
     private lateinit var clearBtn: Button
@@ -59,12 +59,10 @@ class MainActivity : AppCompatActivity() {
         }
 
         apiBaseInput = field("SchulwareAPI base URL", prefs.getString("api_base", "http://localhost:8000") ?: "")
-        schulnetzBaseInput = field("Schulnetz base URL (for refresh)", prefs.getString("schulnetz_base", "https://schulnetz.bbbaden.ch") ?: "")
-        emailInput = field("Email (only for /refresh cold start)", prefs.getString("email", "") ?: "")
-        passwordInput = field("Password (only for /refresh cold start)", "", password = true)
+        schulnetzBaseInput = field("Schulnetz base URL", prefs.getString("schulnetz_base", "https://schulnetz.bbbaden.ch") ?: "")
 
-        loginBtn = Button(this).apply { text = "1. Login via OAuth" }
-        refreshBtn = Button(this).apply { text = "2. Test stateless refresh" }
+        loginBtn = Button(this).apply { text = "1. Login via OAuth (one-time)" }
+        refreshBtn = Button(this).apply { text = "2. Refresh using stored cookies" }
         clearBtn = Button(this).apply { text = "Reset all stored state" }
 
         webView = WebView(this).apply {
@@ -81,7 +79,7 @@ class MainActivity : AppCompatActivity() {
 
         val scroll = ScrollView(this).apply { addView(output) }
 
-        listOf(apiBaseInput, schulnetzBaseInput, emailInput, passwordInput, loginBtn, refreshBtn, clearBtn, webView, scroll)
+        listOf(apiBaseInput, schulnetzBaseInput, loginBtn, refreshBtn, clearBtn, webView, scroll)
             .forEach { root.addView(it) }
         setContentView(root)
 
@@ -135,14 +133,54 @@ class MainActivity : AppCompatActivity() {
      * (a long MS auth code that Schulnetz consumes internally). Only the
      * **subsequent** Schulnetz-issued code at `schulnetz.web.app/callback`
      * is the one we exchange for tokens. Match strictly on that host to
-     * avoid grabbing the intermediate MS code. */
+     * avoid grabbing the intermediate MS code.
+     *
+     * On match we ALSO snapshot the WebView's cookies as a Playwright
+     * `storage_state` blob — that's the context_state /refresh replays. */
     private fun interceptCallback(uri: Uri): Boolean {
         val code = uri.getQueryParameter("code") ?: return false
         if (uri.host != "schulnetz.web.app") return false
         val state = uri.getQueryParameter("state")
+        captureCookiesAsContextState()
         webView.visibility = View.GONE
         exchangeCode(code, state)
         return true
+    }
+
+    /** Snapshot WebView cookies for the SSO chain into Playwright storage_state form
+     * and persist them. /refresh replays them server-side; Schulnetz re-auto-logs-in
+     * via Microsoft, issues a fresh code, exchanges for fresh tokens — all without
+     * any user prompt. */
+    private fun captureCookiesAsContextState() {
+        val cm = CookieManager.getInstance().apply { flush() }
+        // Domains the SSO flow touches. We collect everything the WebView would
+        // send to any of these — that's enough to replay the bounce on the server.
+        val originsToCheck = listOf(
+            "https://schulnetz.bbbaden.ch",
+            "https://schulnetz.web.app",
+            "https://login.microsoftonline.com",
+            "https://login.live.com",
+        )
+        val cookies = JSONArray()
+        for (origin in originsToCheck) {
+            val raw = cm.getCookie(origin) ?: continue
+            val host = Uri.parse(origin).host ?: continue
+            raw.split(";").forEach { pair ->
+                val parts = pair.trim().split("=", limit = 2)
+                if (parts.size != 2 || parts[0].isEmpty()) return@forEach
+                cookies.put(JSONObject().apply {
+                    put("name", parts[0])
+                    put("value", parts[1])
+                    put("domain", host)
+                    put("path", "/")
+                })
+            }
+        }
+        val storageState = JSONObject().apply {
+            put("cookies", cookies)
+            put("origins", JSONArray())
+        }
+        prefs.edit().putString("context_state", storageState.toString()).apply()
     }
 
     private fun exchangeCode(code: String, state: String?) {
@@ -195,8 +233,6 @@ class MainActivity : AppCompatActivity() {
             val payload = JSONObject().apply {
                 put("schulnetz_base_url", schulnetzBase)
                 prefs.getString("context_state", null)?.let { put("context_state", JSONObject(it)) }
-                emailInput.text.toString().takeIf { it.isNotBlank() }?.let { put("email", it) }
-                passwordInput.text.toString().takeIf { it.isNotBlank() }?.let { put("password", it) }
             }
             val (status, body) = withContext(Dispatchers.IO) {
                 httpPost("$apiBase/api/authenticate/refresh", payload.toString())
@@ -266,7 +302,6 @@ class MainActivity : AppCompatActivity() {
         prefs.edit()
             .putString("api_base", apiBaseInput.text.toString())
             .putString("schulnetz_base", schulnetzBaseInput.text.toString())
-            .putString("email", emailInput.text.toString())
             .apply()
     }
 
