@@ -1,9 +1,7 @@
 import re
 from bs4 import BeautifulSoup
-from typing import List, Dict
 
-
-def scrape_listen(html: str) -> List[Dict[str, str]]:
+def scrape_listen(html: str) -> list[dict[str, str]]:
     soup = BeautifulSoup(html, "html.parser")
     documents = []
 

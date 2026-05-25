@@ -1,6 +1,6 @@
 import json
-from dataclasses import dataclass, field
-from typing import Any, List, Optional
+from dataclasses import dataclass
+from typing import Any
 
 from fastapi import HTTPException, Response
 from fastapi.responses import JSONResponse
@@ -14,14 +14,12 @@ from src.infrastructure.monitoring import monitor_performance, add_breadcrumb, c
 
 logger = get_logger("mobile_proxy")
 
-
 @dataclass
 class ProxyMobileRestQuery(IQuery[Any]):
     token: str
     target_url_path: str
     method: str
-    query_params: Optional[List[tuple]] = None
-
+    query_params: list[tuple] | None = None
 
 class ProxyMobileRestHandler(IQueryHandler[ProxyMobileRestQuery, Any]):
     async def handle(self, query: ProxyMobileRestQuery) -> Any:
@@ -30,7 +28,7 @@ class ProxyMobileRestHandler(IQueryHandler[ProxyMobileRestQuery, Any]):
         )
 
 @monitor_performance("mobile.proxy.request")
-async def proxy_mobile_rest_query_async(token: str, target_url_path: str, method: str, query_params: Optional[List[tuple]] = None):
+async def proxy_mobile_rest_query_async(token: str, target_url_path: str, method: str, query_params: list[tuple] | None = None):
     # Check if this is a test token - return mock data
     if is_test_token(token):
         logger.info(f"Test token detected - returning mock data for: {target_url_path}")

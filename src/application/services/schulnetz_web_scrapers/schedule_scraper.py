@@ -1,8 +1,6 @@
 import xml.etree.ElementTree as ET
-from typing import List, Dict, Optional
 
-
-def parse_scheduler_xml(xml_text: str) -> List[Dict[str, Optional[str]]]:
+def parse_scheduler_xml(xml_text: str) -> list[dict[str, str | None]]:
     try:
         root = ET.fromstring(xml_text)
     except ET.ParseError:

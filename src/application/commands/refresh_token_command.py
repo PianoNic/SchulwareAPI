@@ -15,7 +15,7 @@ import os
 import re
 import secrets
 import string
-from typing import Optional
+
 from urllib.parse import parse_qs, urlencode, urlparse
 
 import httpx
@@ -32,16 +32,13 @@ SCHULNETZ_CLIENT_ID = os.getenv("SCHULNETZ_CLIENT_ID", "ppyybShnMerHdtBQ")
 
 logger = get_logger("refresh_token_command")
 
-
 @dataclass
 class RefreshTokenCommand(ICommand[RefreshTokenResponseDto]):
     request: RefreshTokenRequestDto
 
-
 class RefreshTokenHandler(ICommandHandler[RefreshTokenCommand, RefreshTokenResponseDto]):
     async def handle(self, command: RefreshTokenCommand) -> RefreshTokenResponseDto:
         return await refresh_token_command_async(command.request)
-
 
 async def refresh_token_command_async(request: RefreshTokenRequestDto) -> RefreshTokenResponseDto:
     """Drive a one-shot browser session to harvest fresh mobile + web tokens.
@@ -71,8 +68,8 @@ async def refresh_token_command_async(request: RefreshTokenRequestDto) -> Refres
             context = await browser.new_context(**ctx_kwargs)
 
             page = await context.new_page()
-            code: Optional[str] = None
-            state: Optional[str] = None
+            code: str | None = None
+            state: str | None = None
 
             try:
                 await page.goto(request.schulnetz_base_url, wait_until="load", timeout=60_000)
@@ -130,7 +127,6 @@ async def refresh_token_command_async(request: RefreshTokenRequestDto) -> Refres
         finally:
             await browser.close()
 
-
 # ---------- internals ----------
 
 async def _perform_microsoft_sso(page, request: RefreshTokenRequestDto) -> None:
@@ -152,15 +148,13 @@ async def _perform_microsoft_sso(page, request: RefreshTokenRequestDto) -> None:
     except Exception:
         pass
 
-
-def _extract_code_state(url: str) -> tuple[Optional[str], Optional[str]]:
+def _extract_code_state(url: str) -> tuple[str | None, str | None]:
     if "code=" not in url:
         return None, None
     qs = parse_qs(urlparse(url).query)
     return qs.get("code", [None])[0], qs.get("state", [None])[0]
 
-
-async def _exchange_mobile_tokens(context, schulnetz_base_url: str) -> tuple[Optional[str], Optional[str]]:
+async def _exchange_mobile_tokens(context, schulnetz_base_url: str) -> tuple[str | None, str | None]:
     """Run a fresh PKCE flow inside the same context to mint mobile tokens."""
     code_verifier = "".join(secrets.choice(string.ascii_letters + string.digits) for _ in range(128))
     s256 = hashlib.sha256(code_verifier.encode()).digest()
@@ -178,7 +172,7 @@ async def _exchange_mobile_tokens(context, schulnetz_base_url: str) -> tuple[Opt
     }
 
     page = await context.new_page()
-    pkce_code: Optional[str] = None
+    pkce_code: str | None = None
     try:
         captured = {"code": None}
 
@@ -223,10 +217,9 @@ async def _exchange_mobile_tokens(context, schulnetz_base_url: str) -> tuple[Opt
         data = res.json()
         return data.get("access_token"), data.get("refresh_token")
 
-
 async def _capture_web_session(
-    schulnetz_base_url: str, code: str, state: Optional[str]
-) -> tuple[Optional[str], Optional[str], Optional[str]]:
+    schulnetz_base_url: str, code: str, state: str | None
+) -> tuple[str | None, str | None, str | None]:
     async with httpx.AsyncClient(follow_redirects=True, timeout=30.0) as client:
         login_url = f"{schulnetz_base_url}/loginto.php"
         params = {"code": code, "state": state or "", "mode": "4", "lang": ""}
@@ -245,5 +238,4 @@ async def _capture_web_session(
         web_trans_id = transid_match.group(1) if transid_match else None
 
         return session_id, web_user_id, web_trans_id
-
 

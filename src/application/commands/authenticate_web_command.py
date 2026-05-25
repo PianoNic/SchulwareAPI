@@ -12,12 +12,10 @@ from src.application.dtos.auth_dto import WebSessionDto
 from src.application.services import db_service
 from src.api.auth import auth
 
-
 @dataclass
 class AuthenticateWebCommand(ICommand[Any]):
     email: str
     password: str
-
 
 class AuthenticateWebHandler(ICommandHandler[AuthenticateWebCommand, Any]):
     async def handle(self, command: AuthenticateWebCommand) -> Any:

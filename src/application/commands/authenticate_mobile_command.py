@@ -13,12 +13,10 @@ import secrets
 # Logger for this module
 logger = get_logger("mobile_auth")
 
-
 @dataclass
 class AuthenticateMobileCommand(ICommand[Any]):
     email: str
     password: str
-
 
 class AuthenticateMobileHandler(ICommandHandler[AuthenticateMobileCommand, Any]):
     async def handle(self, command: AuthenticateMobileCommand) -> Any:

@@ -1,4 +1,4 @@
-from typing import Optional, Tuple
+
 import httpx
 from src.infrastructure.logging_config import get_logger
 from src.application.services.env_service import get_env_variable
@@ -14,7 +14,7 @@ class TokenService:
     def __init__(self):
         self.client_id = get_env_variable("SCHULNETZ_CLIENT_ID")
 
-    async def refresh_mobile_token(self, refresh_token: str) -> Tuple[Optional[str], Optional[str]]:
+    async def refresh_mobile_token(self, refresh_token: str) -> tuple[str | None, str | None]:
         """Refresh mobile API token"""
         token_url = "https://schulnetz.bbbaden.ch/token.php"
         

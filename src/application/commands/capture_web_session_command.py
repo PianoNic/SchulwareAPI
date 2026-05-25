@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import Optional
 
 from mediatorx import ICommand, ICommandHandler
 
@@ -7,19 +6,16 @@ from src.application.dtos.web_session_dtos import WebSessionResponseDto
 from src.application.services.env_service import get_env_variable
 from src.application.services.web_session_service import capture_web_session
 
-
 @dataclass
 class CaptureWebSessionCommand(ICommand[WebSessionResponseDto]):
     code: str
-    state: Optional[str] = None
-
+    state: str | None = None
 
 class CaptureWebSessionHandler(ICommandHandler[CaptureWebSessionCommand, WebSessionResponseDto]):
     async def handle(self, command: CaptureWebSessionCommand) -> WebSessionResponseDto:
         return await capture_web_session_command_async(command.code, command.state)
 
-
-async def capture_web_session_command_async(code: str, state: Optional[str]) -> WebSessionResponseDto:
+async def capture_web_session_command_async(code: str, state: str | None) -> WebSessionResponseDto:
     base_url = get_env_variable("SCHULNETZ_WEB_BASE_URL")
     cookies, session_info = await capture_web_session(base_url, code, state)
 

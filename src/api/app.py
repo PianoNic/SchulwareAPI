@@ -1,14 +1,24 @@
+import os
+
 from fastapi import FastAPI
+from fastapi.openapi.utils import get_openapi
+from fastapi.routing import APIRoute
+from slowapi.errors import RateLimitExceeded
+
+from src.api.controllers import (
+    app_controller,
+    auth_controller,
+    mobile_proxy_controller,
+    web_api_controller,
+    web_session_controller,
+)
+from src.api.middleware.sentry_middleware import SentryMiddleware, SentryAsyncContextMiddleware
+from src.api.rate_limit import shared_limiter, shared_rate_limit_exceeded_handler
+from src.application.services.app_config_service import app_config
 from src.application.services.db_service import setup_db
 from src.application.services.env_service import load_env
-from src.application.services.app_config_service import app_config
-from src.api.router_registry import router_registry
 from src.infrastructure.logging_config import setup_colored_logging
 from src.infrastructure.monitoring import initialize_sentry
-from fastapi.openapi.utils import get_openapi
-import os
-from src.api.middleware.sentry_middleware import SentryMiddleware, SentryAsyncContextMiddleware
-
 
 setup_colored_logging()
 
@@ -24,21 +34,39 @@ initialize_sentry(
     traces_sample_rate=0.1
 )
 
-# Get version and environment from application.properties
-app_version = app_config.get_version()
-app_environment = app_config.get_environment()
+def _custom_operation_id(route: APIRoute) -> str:
+    """Generate operationIds as kebab-joined path segments after `/api/`.
+
+    Example: `/api/app/app-info` -> `app-app-info`.
+    """
+    parts = route.path.strip("/").split("/")
+    if parts and parts[0] == "api":
+        parts = parts[1:]
+    return "-".join(parts) if parts else "root"
 
 app = FastAPI(
     title="Schulware API Wrapper",
-    description=f"A FastAPI application to wrap Schulware API endpoints.\n\n**Environment:** {app_environment}",
-    version=app_version,
+    description=f"A FastAPI application to wrap Schulware API endpoints.\n\n**Environment:** {app_config.get_environment()}",
+    version=app_config.get_version(),
     redoc_url=None,
-    docs_url="/"
+    docs_url="/",
+    generate_unique_id_function=_custom_operation_id,
 )
 
-# Add Sentry middleware for enhanced error tracking
+# Sentry middleware for enhanced error tracking
 app.add_middleware(SentryMiddleware)
 app.add_middleware(SentryAsyncContextMiddleware)
+
+# Rate limiting
+app.state.limiter = shared_limiter
+app.add_exception_handler(RateLimitExceeded, shared_rate_limit_exceeded_handler)
+
+# Routers
+app.include_router(app_controller.router)
+app.include_router(auth_controller.router)
+app.include_router(mobile_proxy_controller.router)
+app.include_router(web_api_controller.router)
+app.include_router(web_session_controller.router)
 
 def _flatten_any_of_nullable(obj):
     if isinstance(obj, dict):
@@ -65,7 +93,6 @@ def _flatten_any_of_nullable(obj):
             _flatten_any_of_nullable(item)
     return obj
 
-
 def custom_openapi():
     data = get_openapi(
         title=app.title,
@@ -81,8 +108,5 @@ def custom_openapi():
                 and ("items" in data["components"]["schemas"]["ValidationError"]["properties"]["loc"])):
         data["components"]["schemas"]["ValidationError"]["properties"]["loc"]["items"] = {"type": "string"}
     return data
-
-
-router_registry.auto_register(app)
 
 app.openapi = custom_openapi

@@ -1,13 +1,11 @@
 import re
 from bs4 import BeautifulSoup
-from typing import List, Dict, Any
-
+from typing import Any
 
 def _clean(text: str) -> str:
     return re.sub(r'\s+', ' ', text).strip()
 
-
-def scrape_noten(html: str) -> Dict[str, Any]:
+def scrape_noten(html: str) -> dict[str, Any]:
     soup = BeautifulSoup(html, "html.parser")
 
     courses = []

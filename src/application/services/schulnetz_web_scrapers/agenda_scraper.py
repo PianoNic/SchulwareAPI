@@ -1,11 +1,8 @@
 import re
-import json
 from bs4 import BeautifulSoup
-from typing import List, Dict, Any
-from datetime import datetime, timedelta
+from typing import Any
 
-
-def scrape_agenda(html: str) -> Dict[str, Any]:
+def scrape_agenda(html: str) -> dict[str, Any]:
     """
     Parse the agenda page. The agenda uses a JavaScript scheduler widget,
     so we extract metadata and the scheduler config from the HTML.
@@ -48,8 +45,7 @@ def scrape_agenda(html: str) -> Dict[str, Any]:
 
     return result
 
-
-def _extract_scheduler_url(script_text: str) -> Dict[str, str]:
+def _extract_scheduler_url(script_text: str) -> dict[str, str]:
     config = {}
 
     pageid_match = re.search(r'pageid[=:](\d+)', script_text)

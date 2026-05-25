@@ -9,10 +9,10 @@ import secrets
 import string
 import os
 from urllib.parse import urlparse, parse_qs, urlencode
-from typing import Optional, Tuple, Dict, Any
+from typing import Any
 from dotenv import load_dotenv
 from src.infrastructure.logging_config import get_logger
-from src.infrastructure.monitoring import monitor_performance, add_breadcrumb, capture_exception
+from src.infrastructure.monitoring import monitor_performance, add_breadcrumb
 from playwright.async_api import async_playwright, Page, expect
 
 # Logger for this module
@@ -27,24 +27,20 @@ SCHULNETZ_CLIENT_ID = os.getenv("SCHULNETZ_CLIENT_ID")
 if not all([SCHULNETZ_CLIENT_ID]):
     raise EnvironmentError("Missing required environment variables.")
 
-
-
 def generate_random_string(length: int) -> str:
     """Generate a cryptographically secure random string."""
     return "".join(
         secrets.choice(string.ascii_letters + string.digits) for _ in range(length)
     )
 
-
-def generate_pkce_challenge() -> Tuple[str, str]:
+def generate_pkce_challenge() -> tuple[str, str]:
     """Generate PKCE code verifier and code challenge."""
     code_verifier = generate_random_string(128)
     s256 = hashlib.sha256(code_verifier.encode("utf-8")).digest()
     code_challenge = (base64.urlsafe_b64encode(s256).decode("utf-8").rstrip("="))
     return code_verifier, code_challenge
 
-
-def generate_auth_params(state: str, code_challenge: str, nonce: str) -> Dict[str, str]:
+def generate_auth_params(state: str, code_challenge: str, nonce: str) -> dict[str, str]:
     """Generate OAuth2 authorization parameters."""
     return {
         "response_type": "code",
@@ -56,7 +52,6 @@ def generate_auth_params(state: str, code_challenge: str, nonce: str) -> Dict[st
         "code_challenge_method": "S256",
         "nonce": nonce
     }
-
 
 async def handle_2fa_input(page: Page) -> None:
     """Handle 2FA token input when required."""
@@ -74,7 +69,6 @@ async def handle_2fa_input(page: Page) -> None:
     if await submit_button.is_visible(timeout=5000):
         await submit_button.click()
 
-
 async def handle_authenticator_code_display(page: Page) -> None:
     """Handle authenticator app code display."""
     logger.info("Handling authenticator code display...")
@@ -86,7 +80,6 @@ async def handle_authenticator_code_display(page: Page) -> None:
     await auth_number.wait_for(state="hidden", timeout=60000)
     logger.info("Authentication dialog has closed")
 
-
 async def handle_security_info_update(page: Page) -> None:
     """Handle security information update dialogger."""
     logger.info("Handling security information update...")
@@ -94,14 +87,12 @@ async def handle_security_info_update(page: Page) -> None:
     await container.wait_for(state="visible", timeout=5000)
     # TODO: handle the security info update form
 
-
 async def handle_stay_signed_in(page: Page) -> None:
     """Handle stay signed in prompt."""
     logger.info("Handling 'Stay signed in?' prompt...")
     yes_button = page.locator('#idSIButton9')
     await yes_button.wait_for(state="visible", timeout=3000)
     await yes_button.click()
-
 
 async def handle_post_login_flow(page: Page) -> None:
     """Handle all post-login Microsoft authentication steps dynamically."""
@@ -178,7 +169,6 @@ async def handle_post_login_flow(page: Page) -> None:
 
     await determine_and_handle_next_step()
 
-
 async def perform_microsoft_login(page: Page, email: str, password: str) -> None:
     """Handle the basic Microsoft login form (email and password entry)."""
     try:
@@ -208,8 +198,7 @@ async def perform_microsoft_login(page: Page, email: str, password: str) -> None
         logger.info(f"Page content (partial): {(await page.content())[:1000]}")
         raise
 
-
-def extract_auth_code_from_url(url: str) -> Tuple[Optional[str], Optional[str]]:
+def extract_auth_code_from_url(url: str) -> tuple[str | None, str | None]:
     """Extract authorization code and state from URL parameters."""
     if 'code=' not in url:
         return None, None
@@ -235,8 +224,7 @@ def extract_auth_code_from_url(url: str) -> Tuple[Optional[str], Optional[str]]:
         logger.error(f"Error extracting auth code from URL: {e}")
         return None, None
 
-
-async def get_microsoft_redirect_code(email: str, password: str, state: str, code_challenge: str, nonce: str) -> Tuple[Optional[str], Optional[str]]:
+async def get_microsoft_redirect_code(email: str, password: str, state: str, code_challenge: str, nonce: str) -> tuple[str | None, str | None]:
     """
     Navigate through Microsoft authentication flow and extract the authorization code.
 
@@ -326,8 +314,7 @@ async def get_microsoft_redirect_code(email: str, password: str, state: str, cod
             await context.close()
             await browser.close()
 
-
-async def exchange_code_for_tokens(auth_code: str, code_verifier: str) -> Tuple[Optional[str], Optional[str]]:
+async def exchange_code_for_tokens(auth_code: str, code_verifier: str) -> tuple[str | None, str | None]:
     """
     Exchange authorization code for access and refresh tokens.
 
@@ -401,9 +388,8 @@ async def exchange_code_for_tokens(auth_code: str, code_verifier: str) -> Tuple[
     finally:
         await httpx_client.aclose()
 
-
 @monitor_performance("auth.exchange_code")
-async def exchange_authorization_code_direct(auth_code: str, code_verifier: Optional[str] = None, auth_type: str = "mobile") -> Dict[str, Any]:
+async def exchange_authorization_code_direct(auth_code: str, code_verifier: str | None = None, auth_type: str = "mobile") -> dict[str, Any]:
     """
     Exchange authorization code for tokens without using Playwright.
     This function is used when the authorization code is already obtained through external means.
@@ -486,8 +472,7 @@ async def exchange_authorization_code_direct(auth_code: str, code_verifier: Opti
             "error": str(e)
         }
 
-
-def validate_state_parameter(expected_state: str, received_state: Optional[str]) -> bool:
+def validate_state_parameter(expected_state: str, received_state: str | None) -> bool:
     """Validate OAuth2 state parameter for CSRF protection."""
     if not received_state:
         logger.info("Note: State validation skipped - no state received")
@@ -541,8 +526,7 @@ def validate_state_parameter(expected_state: str, received_state: Optional[str])
     logger.info("  This could indicate a security issue, but we'll continue...")
     return False
 
-
-async def get_web_session_cookies(email: str, password: str) -> Tuple[Optional[Dict[str, str]], Optional[str]]:
+async def get_web_session_cookies(email: str, password: str) -> tuple[dict[str, str] | None, str | None]:
     """
     Authenticate via web flow and extract session cookies and auth code.
     
@@ -607,8 +591,7 @@ async def get_web_session_cookies(email: str, password: str) -> Tuple[Optional[D
         finally:
             await browser.close()
 
-
-async def authenticate_with_web_session(email: str, password: str) -> Dict[str, Any]:
+async def authenticate_with_web_session(email: str, password: str) -> dict[str, Any]:
     """
     Web authentication function that maintains session cookies instead of OAuth tokens.
     
@@ -641,8 +624,7 @@ async def authenticate_with_web_session(email: str, password: str) -> Dict[str, 
         logger.error(f"Web authentication error: {e}")
         return {"success": False, "error": str(e)}
 
-
-async def make_authenticated_web_request(url: str, session_cookies: Dict[str, str], method: str = "GET", follow_redirects: bool = False, **kwargs) -> httpx.Response:
+async def make_authenticated_web_request(url: str, session_cookies: dict[str, str], method: str = "GET", follow_redirects: bool = False, **kwargs) -> httpx.Response:
     """
     Make an authenticated request using web session cookies.
     
@@ -683,7 +665,7 @@ async def make_authenticated_web_request(url: str, session_cookies: Dict[str, st
         
         return response
 
-async def authenticate_with_credentials(email: str, password: str, auth_type: str = "mobile") -> Dict[str, Any]:
+async def authenticate_with_credentials(email: str, password: str, auth_type: str = "mobile") -> dict[str, Any]:
     """
     High-level authentication function with provided credentials.
     
@@ -758,8 +740,7 @@ async def authenticate_with_credentials(email: str, password: str, auth_type: st
     else:
         return {"success": False, "error": f"Unknown auth_type: {auth_type}. Use 'mobile' or 'web'."}
 
-
-async def main(email: Optional[str] = None, password: Optional[str] = None, auth_type: str = "mobile") -> Tuple[Optional[str], Optional[str]]:
+async def main(email: str | None = None, password: str | None = None, auth_type: str = "mobile") -> tuple[str | None, str | None]:
     """
     Main authentication function for backward compatibility.
     
@@ -786,7 +767,6 @@ async def main(email: Optional[str] = None, password: Optional[str] = None, auth
     else:
         logger.error(f"Authentication failed: {result['error']}")
         return None, None
-
 
 # Example usage functions
 async def example_web_authenticated_request(email: str, password: str, page_id: str, resource_id: str, trans_id: str):
@@ -822,7 +802,6 @@ async def example_web_authenticated_request(email: str, password: str, page_id: 
         logger.error(f"Request failed: {e}")
         return None
 
-
 async def example_mobile_authenticated_request(email: str, password: str):
     """
     Example function showing how to make authenticated API requests with OAuth2 tokens.
@@ -854,7 +833,7 @@ async def example_mobile_authenticated_request(email: str, password: str):
             return None
 
 @monitor_performance("browser.authenticate.webapp_flow")
-async def authenticate_unified_webapp_flow(email: str, password: str) -> Dict[str, Any]:
+async def authenticate_unified_webapp_flow(email: str, password: str) -> dict[str, Any]:
     """
     Alternative unified authentication that properly handles the schulnetz.web.app redirect flow.
     
@@ -1055,7 +1034,7 @@ async def authenticate_unified_webapp_flow(email: str, password: str) -> Dict[st
     }
 
 @monitor_performance("browser.authenticate.unified")
-async def authenticate_unified(email: str, password: str) -> Dict[str, Any]:
+async def authenticate_unified(email: str, password: str) -> dict[str, Any]:
     """
     Unified authentication using navigation listener to capture auth code during redirects.
     
@@ -1079,7 +1058,6 @@ async def authenticate_unified(email: str, password: str) -> Dict[str, Any]:
     logger.info(f"  Code Challenge: {code_challenge}")
     logger.info(f"  State: {state}")
     logger.info(f"  Nonce: {nonce}")
-
 
     async with async_playwright() as playwright:
         browser = await playwright.chromium.launch(headless=True)
@@ -1227,7 +1205,7 @@ async def authenticate_unified(email: str, password: str) -> Dict[str, Any]:
         "redirect_domain": redirect_domain or "unknown"
     }
 
-async def authenticate_with_existing_session(session_cookies: Dict[str, str], auth_type: str) -> Dict[str, Any]:
+async def authenticate_with_existing_session(session_cookies: dict[str, str], auth_type: str) -> dict[str, Any]:
     """
     Attempt authentication using existing session cookies without full Microsoft login.
     
@@ -1299,7 +1277,7 @@ async def authenticate_with_existing_session(session_cookies: Dict[str, str], au
             "requires_full_auth": True
         }
 
-def generate_oauth_url(auth_type: str = "mobile", redirect_uri: str = "") -> Dict[str, str]:
+def generate_oauth_url(auth_type: str = "mobile", redirect_uri: str = "") -> dict[str, str]:
     """
     Generate OAuth authorization URL for Microsoft login.
 
@@ -1350,7 +1328,6 @@ def generate_oauth_url(auth_type: str = "mobile", redirect_uri: str = "") -> Dic
 
     return result
 
-
 def extract_navigation_urls(html_content: str) -> dict:
     """
     Extract navigation URLs from the schulnetz main page HTML.
@@ -1391,7 +1368,6 @@ def extract_navigation_urls(html_content: str) -> dict:
     except Exception as e:
         logger.error(f"Error parsing HTML for navigation URLs: {e}")
         return {}
-
 
 # Legacy function name mapping for backward compatibility
 async def handle_microsoft_login(page: Page, email: str, password: str) -> None:

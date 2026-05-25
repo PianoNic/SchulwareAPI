@@ -1,21 +1,18 @@
 from pydantic import BaseModel
-from typing import Optional
-
 
 class HomeworkDto(BaseModel):
-    id: Optional[str] = None
-    title: Optional[str] = None
-    description: Optional[str] = None
-    dueDate: Optional[str] = None
-    courseId: Optional[str] = None
-    courseName: Optional[str] = None
-    isCompleted: Optional[bool] = None
-
+    id: str | None = None
+    title: str | None = None
+    description: str | None = None
+    dueDate: str | None = None
+    courseId: str | None = None
+    courseName: str | None = None
+    isCompleted: bool | None = None
 
 class ObjectiveDto(BaseModel):
-    id: Optional[str] = None
-    title: Optional[str] = None
-    description: Optional[str] = None
-    date: Optional[str] = None
-    courseId: Optional[str] = None
-    courseName: Optional[str] = None
+    id: str | None = None
+    title: str | None = None
+    description: str | None = None
+    date: str | None = None
+    courseId: str | None = None
+    courseName: str | None = None
