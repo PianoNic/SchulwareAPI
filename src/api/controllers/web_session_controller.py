@@ -13,6 +13,9 @@ from src.application.dtos.web_session_dtos import (
 )
 from src.application.queries.scrape_web_page_query import ScrapeWebPageQuery
 from src.application.queries.validate_web_session_query import ValidateWebSessionQuery
+from src.infrastructure.logging_config import get_logger
+
+logger = get_logger("web_session_controller")
 
 router = APIRouter(prefix="/api/websession", tags=["Web Session"])
 
@@ -26,7 +29,7 @@ class WebSessionController:
         """Exchange an OAuth code for a Schulnetz PHP web session.
         Returns PHPSESSID cookie and session parameters (id, transid) needed for scraping.
         """
-        return await self.mediator.send(CaptureWebSessionCommand(body.code, body.state))
+        return await self.mediator.send(CaptureWebSessionCommand(body.code, body.state, body.code_verifier))
 
     @router.post("/scrape", response_model=WebScrapeResponseDto)
     @shared_limiter.limit("30/minute")

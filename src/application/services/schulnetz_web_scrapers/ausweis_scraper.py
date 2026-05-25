@@ -1,20 +1,13 @@
-from bs4 import BeautifulSoup
+"""Student ID card (Ausweis) page scraper.
 
-def scrape_ausweis(html: str) -> dict[str, str | None]:
-    soup = BeautifulSoup(html, "html.parser")
-    info = {}
+The student ID page renders the card with absolutely-positioned base64
+images and inline CSS — losing that layout to a structured table dump would
+break rendering in any client that just wants to display the card. So this
+scraper returns the raw HTML body and lets the client decide how to render.
+"""
 
-    for table in soup.find_all("table"):
-        for row in table.find_all("tr"):
-            cells = row.find_all("td")
-            if len(cells) >= 2:
-                key = cells[0].get_text(strip=True)
-                value = cells[1].get_text(strip=True)
-                if key:
-                    info[key] = value
+from typing import Any
 
-    img = soup.find("img", src=lambda s: s and "qr" in s.lower())
-    if img:
-        info["qr_code_url"] = img.get("src")
 
-    return info
+def scrape_ausweis(html: str) -> dict[str, Any]:
+    return {"html": html}

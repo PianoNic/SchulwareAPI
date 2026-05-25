@@ -15,7 +15,12 @@ WEB_HEADERS = {
     "Sec-Fetch-Mode": "navigate",
 }
 
-async def capture_web_session(schulnetz_base_url: str, code: str, state: str) -> tuple[dict[str, str] | None, dict[str, str] | None]:
+async def capture_web_session(
+    schulnetz_base_url: str,
+    code: str,
+    state: str,
+    code_verifier: str | None = None,
+) -> tuple[dict[str, str] | None, dict[str, str] | None]:
     """
     Exchange an OAuth authorization code for a Schulnetz PHP web session.
 
@@ -26,13 +31,21 @@ async def capture_web_session(schulnetz_base_url: str, code: str, state: str) ->
         schulnetz_base_url: e.g. https://schulnetz.bbbaden.ch
         code: OAuth authorization code from Microsoft SSO
         state: OAuth state parameter
+        code_verifier: PKCE code_verifier (required if authorize.php was called with code_challenge)
 
     Returns:
         Tuple of (cookies_dict, session_info) or (None, None) if failed.
         session_info contains: id, transid, navigation_urls extracted from the landing page.
     """
-    login_url = f"{schulnetz_base_url}/loginto.php"
-    params = {"code": code, "state": state, "mode": "4", "lang": ""}
+    # Schulnetz's OAuth callback is the school root (`/`), NOT `/loginto.php`.
+    # The root handler exchanges the code with Microsoft, sets PHPSESSID, and
+    # then redirects internally to /loginto.php?mode=4&lang= which renders the
+    # dashboard. Hitting /loginto.php?code=... directly returns a
+    # "session expired" error page.
+    login_url = f"{schulnetz_base_url}/"
+    params: dict[str, str] = {"code": code, "state": state}
+    if code_verifier:
+        params["code_verifier"] = code_verifier
 
     logger.info(f"Exchanging OAuth code for web session via loginto.php")
     logger.info(f"Code length: {len(code)}, State: {state[:20]}...")
@@ -98,7 +111,7 @@ def _extract_session_info(url: str, html: str) -> dict[str, str] | None:
 
     return info if info else None
 
-async def scrape_page(schulnetz_base_url: str, cookies: dict[str, str], pageid: str, session_id: str, transid: str) -> str | None:
+async def scrape_page(schulnetz_base_url: str, cookies: dict[str, str], pageid: str, session_id: str, transid: str, user_agent: str | None = None) -> str | None:
     """
     Fetch a Schulnetz page using stored session cookies.
 
@@ -108,6 +121,9 @@ async def scrape_page(schulnetz_base_url: str, cookies: dict[str, str], pageid: 
         pageid: The page identifier (e.g. "21311" for grades)
         session_id: The session id parameter from the URL
         transid: The transaction id parameter
+        user_agent: Override the default UA. Schulnetz binds PHPSESSID to the UA
+            that created the session, so callers replaying a WebView-issued
+            session MUST pass the WebView's UA.
 
     Returns:
         HTML content or None if session expired
@@ -120,6 +136,8 @@ async def scrape_page(schulnetz_base_url: str, cookies: dict[str, str], pageid: 
         "Referer": f"{schulnetz_base_url}/",
         "Sec-Fetch-Site": "same-origin",
     }
+    if user_agent:
+        headers["User-Agent"] = user_agent
 
     async with httpx.AsyncClient(headers=headers, cookies=cookies, follow_redirects=True, timeout=30.0) as client:
         try:
@@ -138,14 +156,14 @@ async def scrape_page(schulnetz_base_url: str, cookies: dict[str, str], pageid: 
             logger.error(f"Failed to scrape pageid={pageid}: {e}")
             return None
 
-async def validate_session(schulnetz_base_url: str, cookies: dict[str, str], session_id: str, transid: str) -> bool:
+async def validate_session(schulnetz_base_url: str, cookies: dict[str, str], session_id: str, transid: str, user_agent: str | None = None) -> bool:
     """Check if a PHP session is still valid."""
-    html = await scrape_page(schulnetz_base_url, cookies, "21111", session_id, transid)
+    html = await scrape_page(schulnetz_base_url, cookies, "21111", session_id, transid, user_agent=user_agent)
     if html is None:
         return False
     return "pageid" in html
 
-async def fetch_scheduler_data(schulnetz_base_url: str, cookies: dict[str, str], session_id: str, transid: str, date: str | None = None) -> str | None:
+async def fetch_scheduler_data(schulnetz_base_url: str, cookies: dict[str, str], session_id: str, transid: str, date: str | None = None, user_agent: str | None = None) -> str | None:
     """Fetch timetable/agenda data from the scheduler AJAX endpoint."""
     from datetime import datetime, timedelta
 
@@ -176,6 +194,8 @@ async def fetch_scheduler_data(schulnetz_base_url: str, cookies: dict[str, str],
         "Accept": "text/html, */*; q=0.01",
         "X-Requested-With": "XMLHttpRequest",
     }
+    if user_agent:
+        headers["User-Agent"] = user_agent
 
     async with httpx.AsyncClient(headers=headers, cookies=cookies, follow_redirects=True, timeout=30.0) as client:
         try:

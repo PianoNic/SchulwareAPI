@@ -1291,42 +1291,36 @@ def generate_oauth_url(auth_type: str = "mobile", redirect_uri: str = "") -> dic
         - code_verifier: PKCE code verifier (mobile only, client must store this)
         - state: The state parameter for CSRF protection
     """
-    # Generate PKCE parameters for mobile flow
-    code_verifier, code_challenge = generate_pkce_challenge() if auth_type == "mobile" else (None, None)
+    # Schulnetz requires PKCE on both mobile and web flows — the authorize.php
+    # endpoint rejects requests that don't include a code_challenge.
+    code_verifier, code_challenge = generate_pkce_challenge()
     state = generate_random_string(32)
     nonce = generate_random_string(32)
 
-    # Generate authorization parameters
     auth_params = {
         "response_type": "code",
         "client_id": SCHULNETZ_CLIENT_ID,
         "state": state,
         "redirect_uri": redirect_uri,
-        "scope": "openid ",  # Note the trailing space as in original
-        "nonce": nonce
+        "scope": "openid ",  # trailing space matches the original Schulnetz flow
+        "nonce": nonce,
+        "code_challenge": code_challenge,
+        "code_challenge_method": "S256",
     }
 
-    # Add PKCE parameters for mobile flow
-    if auth_type == "mobile" and code_challenge:
-        auth_params["code_challenge"] = code_challenge
-        auth_params["code_challenge_method"] = "S256"
-
-    # Build authorization URL
-    auth_url = "https://schulnetz.bbbaden.ch/authorize.php?" + urlencode(auth_params)
+    # `authorize.php` lives on the school's Schulnetz instance (API base),
+    # not on the PWA host (`SCHULNETZ_WEB_BASE_URL` points at schulnetz.web.app).
+    api_base = os.getenv("SCHULNETZ_API_BASE_URL", "https://schulnetz.bbbaden.ch")
+    auth_url = f"{api_base}/authorize.php?" + urlencode(auth_params)
 
     logger.info(f"Generated OAuth URL for {auth_type} authentication")
     logger.info(f"Auth URL: {auth_url[:100]}...")
 
-    result = {
+    return {
         "auth_url": auth_url,
-        "state": state
+        "state": state,
+        "code_verifier": code_verifier,
     }
-
-    # Include code_verifier for mobile (client must store this)
-    if auth_type == "mobile" and code_verifier:
-        result["code_verifier"] = code_verifier
-
-    return result
 
 def extract_navigation_urls(html_content: str) -> dict:
     """

@@ -11,12 +11,17 @@ from src.application.services.web_session_service import capture_web_session
 class CaptureWebSessionCommand(ICommand[WebSessionResponseDto]):
     code: str
     state: str | None = None
+    code_verifier: str | None = None
 
 
 class CaptureWebSessionHandler(ICommandHandler[CaptureWebSessionCommand, WebSessionResponseDto]):
     async def handle(self, command: CaptureWebSessionCommand) -> WebSessionResponseDto:
-        base_url = get_env_variable("SCHULNETZ_WEB_BASE_URL")
-        cookies, session_info = await capture_web_session(base_url, command.code, command.state)
+        # `loginto.php` lives on the school's Schulnetz instance (API base),
+        # not on the PWA host (`SCHULNETZ_WEB_BASE_URL` points at schulnetz.web.app).
+        base_url = get_env_variable("SCHULNETZ_API_BASE_URL")
+        cookies, session_info = await capture_web_session(
+            base_url, command.code, command.state, command.code_verifier
+        )
 
         if cookies is None:
             return WebSessionResponseDto(
