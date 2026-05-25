@@ -7,18 +7,6 @@ and dispatch via `mediator.send(...)`.
 
 from mediatorx import Mediator
 
-from src.application.commands.authenticate_mobile_command import (
-    AuthenticateMobileCommand,
-    AuthenticateMobileHandler,
-)
-from src.application.commands.authenticate_unified_command import (
-    AuthenticateUnifiedCommand,
-    AuthenticateUnifiedHandler,
-)
-from src.application.commands.authenticate_web_command import (
-    AuthenticateWebCommand,
-    AuthenticateWebHandler,
-)
 from src.application.commands.capture_web_session_command import (
     CaptureWebSessionCommand,
     CaptureWebSessionHandler,
@@ -68,9 +56,6 @@ def build_mediator() -> Mediator:
     m = Mediator()
 
     # Commands
-    m.register(AuthenticateMobileCommand, AuthenticateMobileHandler)
-    m.register(AuthenticateUnifiedCommand, AuthenticateUnifiedHandler)
-    m.register(AuthenticateWebCommand, AuthenticateWebHandler)
     m.register(CaptureWebSessionCommand, CaptureWebSessionHandler)
     m.register(RefreshTokenCommand, RefreshTokenHandler)
 
