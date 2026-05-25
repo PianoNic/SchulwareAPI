@@ -7,6 +7,7 @@ class WebSessionRequestDto(BaseModel):
     """Request DTO for capturing a web session from an OAuth code."""
     code: str = Field(..., description="OAuth authorization code from Microsoft SSO")
     state: str = Field(..., description="OAuth state parameter")
+    code_verifier: str | None = Field(None, description="PKCE code_verifier from /websession/oauth/url")
 
 class WebSessionResponseDto(BaseModel):
     """Response DTO for web session capture."""
@@ -22,6 +23,7 @@ class WebScrapeRequestDto(BaseModel):
     page: str = Field(..., description="Page to scrape: home, grades, absences, agenda, lessons, documents, student_id")
     id: str = Field(..., description="Session id parameter from URL")
     transid: str = Field(..., description="Transaction id parameter from URL")
+    user_agent: str | None = Field(None, description="The WebView UA that created the session (Schulnetz binds PHPSESSID to UA)")
 
 class WebScrapeResponseDto(BaseModel):
     """Response DTO for scraped page."""

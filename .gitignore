@@ -3,6 +3,9 @@ __pycache__/
 *.py[codz]
 *$py.class
 
+# Playwright MCP debug captures
+.playwright-mcp/
+
 # C extensions
 *.so
 

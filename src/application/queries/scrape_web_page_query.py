@@ -36,11 +36,14 @@ class ScrapeWebPageQuery(IQuery[WebScrapeResponseDto]):
 class ScrapeWebPageHandler(IQueryHandler[ScrapeWebPageQuery, WebScrapeResponseDto]):
     async def handle(self, query: ScrapeWebPageQuery) -> WebScrapeResponseDto:
         body = query.body
-        base_url = get_env_variable("SCHULNETZ_WEB_BASE_URL")
+        # Schulnetz's `/index.php` and `/scheduler_processor.php` live on the
+        # school instance (API base). `SCHULNETZ_WEB_BASE_URL` points at the
+        # PWA host (`schulnetz.web.app`) which is wrong for scraping.
+        base_url = get_env_variable("SCHULNETZ_API_BASE_URL")
         cookies = {"PHPSESSID": body.session_id}
 
         if body.page == "schedule":
-            xml = await fetch_scheduler_data(base_url, cookies, body.id, body.transid)
+            xml = await fetch_scheduler_data(base_url, cookies, body.id, body.transid, user_agent=body.user_agent)
             if xml is None:
                 return WebScrapeResponseDto(success=False, message="Session expired or schedule not accessible.")
             try:
@@ -57,7 +60,7 @@ class ScrapeWebPageHandler(IQueryHandler[ScrapeWebPageQuery, WebScrapeResponseDt
             )
 
         pageid, parser = SCRAPERS[body.page]
-        html = await scrape_page(base_url, cookies, pageid, body.id, body.transid)
+        html = await scrape_page(base_url, cookies, pageid, body.id, body.transid, user_agent=body.user_agent)
         if html is None:
             return WebScrapeResponseDto(
                 success=False,

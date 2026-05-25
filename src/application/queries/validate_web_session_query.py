@@ -16,8 +16,9 @@ class ValidateWebSessionQuery(IQuery[Any]):
 class ValidateWebSessionHandler(IQueryHandler[ValidateWebSessionQuery, Any]):
     async def handle(self, query: ValidateWebSessionQuery) -> dict:
         body = query.body
-        base_url = get_env_variable("SCHULNETZ_WEB_BASE_URL")
+        # Hit the school instance, not the PWA (`SCHULNETZ_WEB_BASE_URL`).
+        base_url = get_env_variable("SCHULNETZ_API_BASE_URL")
         cookies = {"PHPSESSID": body.session_id}
 
-        is_valid = await validate_session(base_url, cookies, body.id, body.transid)
+        is_valid = await validate_session(base_url, cookies, body.id, body.transid, user_agent=body.user_agent)
         return {"valid": is_valid, "message": "Session is active" if is_valid else "Session expired"}
