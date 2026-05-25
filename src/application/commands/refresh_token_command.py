@@ -36,96 +36,96 @@ logger = get_logger("refresh_token_command")
 class RefreshTokenCommand(ICommand[RefreshTokenResponseDto]):
     request: RefreshTokenRequestDto
 
-class RefreshTokenHandler(ICommandHandler[RefreshTokenCommand, RefreshTokenResponseDto]):
-    async def handle(self, command: RefreshTokenCommand) -> RefreshTokenResponseDto:
-        return await refresh_token_command_async(command.request)
 
-async def refresh_token_command_async(request: RefreshTokenRequestDto) -> RefreshTokenResponseDto:
+class RefreshTokenHandler(ICommandHandler[RefreshTokenCommand, RefreshTokenResponseDto]):
     """Drive a one-shot browser session to harvest fresh mobile + web tokens.
 
     Returns the updated browser context state alongside the tokens. Caller
     persists the state and replays it on the next call.
     """
-    async with async_playwright() as pw:
-        browser = await pw.chromium.launch(headless=True)
-        try:
-            if request.context_state:
-                cs_cookies = request.context_state.get("cookies", [])
-                cs_origins = request.context_state.get("origins", [])
-                domains = sorted({c.get("domain", "") for c in cs_cookies})
-                logger.info(
-                    "Refresh: %d cookies across %s, %d localStorage origins",
-                    len(cs_cookies), domains, len(cs_origins),
+
+    async def handle(self, command: RefreshTokenCommand) -> RefreshTokenResponseDto:
+        request = command.request
+        async with async_playwright() as pw:
+            browser = await pw.chromium.launch(headless=True)
+            try:
+                if request.context_state:
+                    cs_cookies = request.context_state.get("cookies", [])
+                    cs_origins = request.context_state.get("origins", [])
+                    domains = sorted({c.get("domain", "") for c in cs_cookies})
+                    logger.info(
+                        "Refresh: %d cookies across %s, %d localStorage origins",
+                        len(cs_cookies), domains, len(cs_origins),
+                    )
+
+                ctx_kwargs = {}
+                if request.context_state:
+                    ctx_kwargs["storage_state"] = request.context_state
+                if request.user_agent:
+                    # MS binds session cookies to UA — caller MUST send the same UA the
+                    # cookies were captured with, otherwise the SSO replay is rejected.
+                    ctx_kwargs["user_agent"] = request.user_agent
+                context = await browser.new_context(**ctx_kwargs)
+
+                page = await context.new_page()
+                code: str | None = None
+                state: str | None = None
+
+                try:
+                    await page.goto(request.schulnetz_base_url, wait_until="load", timeout=60_000)
+                    current_url = page.url
+
+                    # SSO session expired → need credentials to re-auth via Microsoft.
+                    if "login.microsoftonline.com" in current_url:
+                        if not request.email or not request.password:
+                            return RefreshTokenResponseDto(
+                                success=False,
+                                message="Microsoft SSO session expired. Email and password required for re-authentication.",
+                            )
+                        await _perform_microsoft_sso(page, request)
+                        await page.wait_for_url(f"{request.schulnetz_base_url}*", timeout=30_000)
+
+                    current_url = page.url
+                    code, state = _extract_code_state(current_url)
+
+                    # Some Schulnetz instances need a second hit before the code shows up.
+                    if not code:
+                        await page.goto(request.schulnetz_base_url, wait_until="load", timeout=30_000)
+                        code, state = _extract_code_state(page.url)
+
+                    if not code:
+                        return RefreshTokenResponseDto(success=False, message="Failed to obtain authorization code")
+
+                finally:
+                    await page.close()
+
+                # Mobile token exchange via a separate PKCE round-trip.
+                access_token, refresh_token = await _exchange_mobile_tokens(context, request.schulnetz_base_url)
+
+                # Capture web session cookies + landing-page params using the original code.
+                session_id, web_user_id, web_trans_id = await _capture_web_session(
+                    request.schulnetz_base_url, code, state
                 )
 
-            ctx_kwargs = {}
-            if request.context_state:
-                ctx_kwargs["storage_state"] = request.context_state
-            if request.user_agent:
-                # MS binds session cookies to UA — caller MUST send the same UA the
-                # cookies were captured with, otherwise the SSO replay is rejected.
-                ctx_kwargs["user_agent"] = request.user_agent
-            context = await browser.new_context(**ctx_kwargs)
+                # Snapshot the updated context for the caller to persist.
+                updated_state = await context.storage_state()
 
-            page = await context.new_page()
-            code: str | None = None
-            state: str | None = None
+                return RefreshTokenResponseDto(
+                    success=True,
+                    access_token=access_token,
+                    refresh_token=refresh_token,
+                    session_id=session_id,
+                    web_session_user_id=web_user_id,
+                    web_session_trans_id=web_trans_id,
+                    context_state=updated_state,
+                    message="Tokens and session refreshed successfully",
+                )
 
-            try:
-                await page.goto(request.schulnetz_base_url, wait_until="load", timeout=60_000)
-                current_url = page.url
-
-                # SSO session expired → need credentials to re-auth via Microsoft.
-                if "login.microsoftonline.com" in current_url:
-                    if not request.email or not request.password:
-                        return RefreshTokenResponseDto(
-                            success=False,
-                            message="Microsoft SSO session expired. Email and password required for re-authentication.",
-                        )
-                    await _perform_microsoft_sso(page, request)
-                    await page.wait_for_url(f"{request.schulnetz_base_url}*", timeout=30_000)
-
-                current_url = page.url
-                code, state = _extract_code_state(current_url)
-
-                # Some Schulnetz instances need a second hit before the code shows up.
-                if not code:
-                    await page.goto(request.schulnetz_base_url, wait_until="load", timeout=30_000)
-                    code, state = _extract_code_state(page.url)
-
-                if not code:
-                    return RefreshTokenResponseDto(success=False, message="Failed to obtain authorization code")
-
+            except Exception as ex:
+                logger.exception("Refresh failed")
+                return RefreshTokenResponseDto(success=False, message=f"Refresh failed: {ex}")
             finally:
-                await page.close()
-
-            # Mobile token exchange via a separate PKCE round-trip.
-            access_token, refresh_token = await _exchange_mobile_tokens(context, request.schulnetz_base_url)
-
-            # Capture web session cookies + landing-page params using the original code.
-            session_id, web_user_id, web_trans_id = await _capture_web_session(
-                request.schulnetz_base_url, code, state
-            )
-
-            # Snapshot the updated context for the caller to persist.
-            updated_state = await context.storage_state()
-
-            return RefreshTokenResponseDto(
-                success=True,
-                access_token=access_token,
-                refresh_token=refresh_token,
-                session_id=session_id,
-                web_session_user_id=web_user_id,
-                web_session_trans_id=web_trans_id,
-                context_state=updated_state,
-                message="Tokens and session refreshed successfully",
-            )
-
-        except Exception as ex:
-            logger.exception("Refresh failed")
-            return RefreshTokenResponseDto(success=False, message=f"Refresh failed: {ex}")
-        finally:
-            await browser.close()
+                await browser.close()
 
 # ---------- internals ----------
 
