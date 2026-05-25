@@ -5,8 +5,6 @@ from fastapi import HTTPException
 from mediatorx import ICommand, ICommandHandler
 
 from src.api.auth import auth
-from src.application.dtos.auth_dto import WebSessionDto
-from src.application.services import db_service
 from src.infrastructure.logging_config import get_logger
 
 logger = get_logger("web_auth")
@@ -27,9 +25,6 @@ class AuthenticateWebHandler(ICommandHandler[AuthenticateWebCommand, Any]):
         try:
             logger.info(f"Performing web authentication for user: {email}")
             result = await auth.authenticate_with_credentials(email, password, "web")
-
-            web_session_dto = WebSessionDto(php_session_id=result["auth_code"])
-            db_service.create_or_update_user(email, web_session_dto=web_session_dto)
 
             if result["success"]:
                 return {

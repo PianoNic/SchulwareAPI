@@ -15,7 +15,6 @@ from src.api.controllers import (
 from src.api.middleware.sentry_middleware import SentryMiddleware, SentryAsyncContextMiddleware
 from src.api.rate_limit import shared_limiter, shared_rate_limit_exceeded_handler
 from src.application.services.app_config_service import app_config
-from src.application.services.db_service import setup_db
 from src.application.services.env_service import load_env
 from src.infrastructure.logging_config import setup_colored_logging
 from src.infrastructure.monitoring import initialize_sentry
@@ -23,7 +22,6 @@ from src.infrastructure.monitoring import initialize_sentry
 setup_colored_logging()
 
 load_env()
-setup_db()
 
 # Initialize Sentry/GlitchTip monitoring
 initialize_sentry(
