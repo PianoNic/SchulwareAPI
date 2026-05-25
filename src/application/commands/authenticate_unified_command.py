@@ -5,9 +5,6 @@ from fastapi import HTTPException
 from mediatorx import ICommand, ICommandHandler
 
 from src.api.auth import auth
-from src.application.dtos.auth_dto import MobileSessionDto, WebSessionDto
-from src.application.dtos.web.web_urls_dto import WebUrlsDto
-from src.application.services import db_service
 from src.infrastructure.logging_config import get_logger
 from src.infrastructure.monitoring import (
     add_breadcrumb,
@@ -64,29 +61,6 @@ class AuthenticateUnifiedHandler(ICommandHandler[AuthenticateUnifiedCommand, Any
                     message="Authentication successful",
                     category="auth",
                     level="info",
-                )
-                mobile_session_dto = MobileSessionDto(
-                    access_token=result["access_token"],
-                    refresh_token=result["refresh_token"],
-                    expires_in=3600,
-                )
-                web_session_dto = WebSessionDto(
-                    php_session_id=result["auth_code"],
-                )
-                web_url_dto = WebUrlsDto(
-                    absent_notices=result["navigation_urls"]["Absenzen"],
-                    agenda=result["navigation_urls"]["Agenda"],
-                    documents=result["navigation_urls"]["Listen&Dokumente"],
-                    grades=result["navigation_urls"]["Noten"],
-                    lesson=result["navigation_urls"]["Unterricht"],
-                    start=result["navigation_urls"]["Start"],
-                    student_id_card=result["navigation_urls"]["Ausweis"],
-                )
-                db_service.create_or_update_user(
-                    email,
-                    mobile_session_dto=mobile_session_dto,
-                    web_session_dto=web_session_dto,
-                    web_url_dto=web_url_dto,
                 )
 
                 set_context("auth_result", {
