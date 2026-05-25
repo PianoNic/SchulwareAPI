@@ -21,12 +21,26 @@ from urllib.parse import parse_qs, urlencode, urlparse
 import httpx
 from playwright.async_api import async_playwright
 
+from dataclasses import dataclass
+
+from mediatorx import ICommand, ICommandHandler
+
 from src.application.dtos.refresh_dtos import RefreshTokenRequestDto, RefreshTokenResponseDto
 from src.infrastructure.logging_config import get_logger
 
 SCHULNETZ_CLIENT_ID = os.getenv("SCHULNETZ_CLIENT_ID", "ppyybShnMerHdtBQ")
 
 logger = get_logger("refresh_token_command")
+
+
+@dataclass
+class RefreshTokenCommand(ICommand[RefreshTokenResponseDto]):
+    request: RefreshTokenRequestDto
+
+
+class RefreshTokenHandler(ICommandHandler[RefreshTokenCommand, RefreshTokenResponseDto]):
+    async def handle(self, command: RefreshTokenCommand) -> RefreshTokenResponseDto:
+        return await refresh_token_command_async(command.request)
 
 
 async def refresh_token_command_async(request: RefreshTokenRequestDto) -> RefreshTokenResponseDto:

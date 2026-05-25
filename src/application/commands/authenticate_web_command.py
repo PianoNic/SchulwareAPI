@@ -1,4 +1,9 @@
+from dataclasses import dataclass
+from typing import Any
+
 from fastapi import HTTPException
+from mediatorx import ICommand, ICommandHandler
+
 from src.infrastructure.logging_config import get_logger
 
 # Logger for this module
@@ -6,6 +11,17 @@ logger = get_logger("web_auth")
 from src.application.dtos.auth_dto import WebSessionDto
 from src.application.services import db_service
 from src.api.auth import auth
+
+
+@dataclass
+class AuthenticateWebCommand(ICommand[Any]):
+    email: str
+    password: str
+
+
+class AuthenticateWebHandler(ICommandHandler[AuthenticateWebCommand, Any]):
+    async def handle(self, command: AuthenticateWebCommand) -> Any:
+        return await authenticate_web_command_async(command.email, command.password)
 
 async def authenticate_web_command_async(email: str, password: str):
     if not email or not password:
