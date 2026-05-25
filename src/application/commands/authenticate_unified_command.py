@@ -1,4 +1,9 @@
+from dataclasses import dataclass
+from typing import Any
+
 from fastapi import HTTPException
+from mediatorx import ICommand, ICommandHandler
+
 from src.infrastructure.logging_config import get_logger
 from src.infrastructure.monitoring import (
     capture_exception,
@@ -13,6 +18,17 @@ from src.application.dtos.auth_dto import MobileSessionDto, WebSessionDto
 from src.api.auth import auth
 
 logger = get_logger("unified_auth")
+
+
+@dataclass
+class AuthenticateUnifiedCommand(ICommand[Any]):
+    email: str
+    password: str
+
+
+class AuthenticateUnifiedHandler(ICommandHandler[AuthenticateUnifiedCommand, Any]):
+    async def handle(self, command: AuthenticateUnifiedCommand) -> Any:
+        return await authenticate_unified_command_async(command.email, command.password)
 
 @monitor_performance("authentication.unified")
 async def authenticate_unified_command_async(email: str, password: str):

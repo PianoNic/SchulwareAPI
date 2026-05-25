@@ -1,4 +1,9 @@
+from dataclasses import dataclass
+from typing import Any
+
 from fastapi import HTTPException
+from mediatorx import ICommand, ICommandHandler
+
 from src.application.services import db_service
 from src.application.dtos.auth_dto import MobileSessionDto
 from src.api.auth import auth
@@ -7,6 +12,17 @@ import secrets
 
 # Logger for this module
 logger = get_logger("mobile_auth")
+
+
+@dataclass
+class AuthenticateMobileCommand(ICommand[Any]):
+    email: str
+    password: str
+
+
+class AuthenticateMobileHandler(ICommandHandler[AuthenticateMobileCommand, Any]):
+    async def handle(self, command: AuthenticateMobileCommand) -> Any:
+        return await authenticate_mobile_command_async(command.email, command.password)
 
 async def authenticate_mobile_command_async(email: str, password: str):
     if not email or not password:

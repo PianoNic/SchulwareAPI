@@ -1,14 +1,33 @@
 import json
-from typing import List, Optional
+from dataclasses import dataclass, field
+from typing import Any, List, Optional
+
 from fastapi import HTTPException, Response
 from fastapi.responses import JSONResponse
 import httpx
+from mediatorx import IQuery, IQueryHandler
+
 from src.application.services.env_service import get_env_variable
 from src.application.services.test_token_config import is_test_token, get_mock_data
 from src.infrastructure.logging_config import get_logger
 from src.infrastructure.monitoring import monitor_performance, add_breadcrumb, capture_exception
 
 logger = get_logger("mobile_proxy")
+
+
+@dataclass
+class ProxyMobileRestQuery(IQuery[Any]):
+    token: str
+    target_url_path: str
+    method: str
+    query_params: Optional[List[tuple]] = None
+
+
+class ProxyMobileRestHandler(IQueryHandler[ProxyMobileRestQuery, Any]):
+    async def handle(self, query: ProxyMobileRestQuery) -> Any:
+        return await proxy_mobile_rest_query_async(
+            query.token, query.target_url_path, query.method, query.query_params
+        )
 
 @monitor_performance("mobile.proxy.request")
 async def proxy_mobile_rest_query_async(token: str, target_url_path: str, method: str, query_params: Optional[List[tuple]] = None):

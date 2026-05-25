@@ -1,0 +1,62 @@
+"""Composition root for MediatorX.
+
+Registers all command and query handlers and exposes `get_mediator` as a
+FastAPI dependency. Controllers obtain the mediator via `Depends(get_mediator)`
+and dispatch via `mediator.send(...)`.
+"""
+
+from mediatorx import Mediator
+
+from src.application.commands.authenticate_mobile_command import (
+    AuthenticateMobileCommand,
+    AuthenticateMobileHandler,
+)
+from src.application.commands.authenticate_unified_command import (
+    AuthenticateUnifiedCommand,
+    AuthenticateUnifiedHandler,
+)
+from src.application.commands.authenticate_web_command import (
+    AuthenticateWebCommand,
+    AuthenticateWebHandler,
+)
+from src.application.commands.refresh_token_command import (
+    RefreshTokenCommand,
+    RefreshTokenHandler,
+)
+from src.application.queries.get_app_info_query import (
+    GetAppInfoQuery,
+    GetAppInfoHandler,
+)
+from src.application.queries.proxy_mobile_rest_query import (
+    ProxyMobileRestQuery,
+    ProxyMobileRestHandler,
+)
+
+
+def build_mediator() -> Mediator:
+    m = Mediator()
+
+    # Commands
+    m.register(AuthenticateMobileCommand, AuthenticateMobileHandler)
+    m.register(AuthenticateUnifiedCommand, AuthenticateUnifiedHandler)
+    m.register(AuthenticateWebCommand, AuthenticateWebHandler)
+    m.register(RefreshTokenCommand, RefreshTokenHandler)
+
+    # Queries
+    m.register(GetAppInfoQuery, GetAppInfoHandler)
+    m.register(ProxyMobileRestQuery, ProxyMobileRestHandler)
+
+    # Pipeline behaviors will be added here in the next step
+    # m.add_behavior(LoggingBehavior)
+    # m.add_behavior(SentryBreadcrumbBehavior)
+    # m.add_behavior(PerformanceBehavior)
+
+    return m
+
+
+_mediator = build_mediator()
+
+
+def get_mediator() -> Mediator:
+    """FastAPI dependency. Returns the process-wide Mediator instance."""
+    return _mediator
