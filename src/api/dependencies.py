@@ -64,7 +64,6 @@ from src.application.queries.validate_web_session_query import (
     ValidateWebSessionHandler,
 )
 
-
 def build_mediator() -> Mediator:
     m = Mediator()
 
@@ -93,9 +92,7 @@ def build_mediator() -> Mediator:
 
     return m
 
-
 _mediator = build_mediator()
-
 
 def get_mediator() -> Mediator:
     """FastAPI dependency. Returns the process-wide Mediator instance."""

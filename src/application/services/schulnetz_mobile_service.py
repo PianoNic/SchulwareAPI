@@ -1,5 +1,5 @@
 import httpx
-from typing import Optional, Dict, Any
+from typing import Any
 from src.application.services.env_service import get_env_variable
 from src.application.services.token_service import token_service, ApplicationType
 from src.application.services.test_token_config import is_test_token, get_mock_data
@@ -13,7 +13,7 @@ class SchulnetzMobileService:
         self.base_url = get_env_variable("SCHULNETZ_API_BASE_URL")
         self.client_id = get_env_variable("SCHULNETZ_CLIENT_ID")
     
-    async def get_user_info(self, user_id: str, token: Optional[str] = None) -> Optional[Dict]:
+    async def get_user_info(self, user_id: str, token: str | None = None) -> Dict | None:
         """Get user information from mobile API"""
         if not token:
             token = token_service.get_valid_access_token(user_id, ApplicationType.MOBILE_API)
@@ -41,8 +41,8 @@ class SchulnetzMobileService:
                 logger.error(f"Failed to get user info: {e}")
                 return None
     
-    async def get_events(self, user_id: str, min_date: Optional[str] = None,
-                        max_date: Optional[str] = None, token: Optional[str] = None) -> Optional[Dict]:
+    async def get_events(self, user_id: str, min_date: str | None = None,
+                        max_date: str | None = None, token: str | None = None) -> Dict | None:
         """Get user events from mobile API"""
         if not token:
             token = token_service.get_valid_access_token(user_id, ApplicationType.MOBILE_API)
@@ -77,7 +77,7 @@ class SchulnetzMobileService:
                 logger.error(f"Failed to get events: {e}")
                 return None
     
-    async def get_grades(self, user_id: str, token: Optional[str] = None) -> Optional[Dict]:
+    async def get_grades(self, user_id: str, token: str | None = None) -> Dict | None:
         """Get user grades from mobile API"""
         if not token:
             token = token_service.get_valid_access_token(user_id, ApplicationType.MOBILE_API)
@@ -106,7 +106,7 @@ class SchulnetzMobileService:
                 return None
     
     async def proxy_request(self, user_id: str, endpoint: str, method: str = "GET",
-                           params: Dict = None, data: Any = None, token: Optional[str] = None) -> Optional[httpx.Response]:
+                           params: Dict = None, data: Any = None, token: str | None = None) -> httpx.Response | None:
         """Generic proxy method for mobile API requests"""
         if not token:
             token = token_service.get_valid_access_token(user_id, ApplicationType.MOBILE_API)

@@ -15,7 +15,6 @@ from src.application.services.schulnetz_web_scrapers.ausweis_scraper import scra
 from src.application.services.schulnetz_web_scrapers.schedule_scraper import parse_scheduler_xml
 from src.infrastructure.logging_config import get_logger
 
-
 logger = get_logger("scrape_web_page_query")
 
 SCRAPERS = {
@@ -28,16 +27,13 @@ SCRAPERS = {
     "student_id": ("50505", scrape_ausweis),
 }
 
-
 @dataclass
 class ScrapeWebPageQuery(IQuery[WebScrapeResponseDto]):
     body: WebScrapeRequestDto
 
-
 class ScrapeWebPageHandler(IQueryHandler[ScrapeWebPageQuery, WebScrapeResponseDto]):
     async def handle(self, query: ScrapeWebPageQuery) -> WebScrapeResponseDto:
         return await scrape_web_page_query_async(query.body)
-
 
 async def scrape_web_page_query_async(body: WebScrapeRequestDto) -> WebScrapeResponseDto:
     if body.page == "schedule":
@@ -68,7 +64,6 @@ async def scrape_web_page_query_async(body: WebScrapeRequestDto) -> WebScrapeRes
     except Exception as e:
         logger.error(f"Scraper error for {body.page}: {e}")
         return WebScrapeResponseDto(success=False, message=f"Parsing error: {str(e)}")
-
 
 async def _scrape_schedule(body: WebScrapeRequestDto) -> WebScrapeResponseDto:
     base_url = get_env_variable("SCHULNETZ_WEB_BASE_URL")

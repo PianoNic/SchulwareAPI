@@ -19,12 +19,10 @@ from src.api.auth import auth
 
 logger = get_logger("unified_auth")
 
-
 @dataclass
 class AuthenticateUnifiedCommand(ICommand[Any]):
     email: str
     password: str
-
 
 class AuthenticateUnifiedHandler(ICommandHandler[AuthenticateUnifiedCommand, Any]):
     async def handle(self, command: AuthenticateUnifiedCommand) -> Any:

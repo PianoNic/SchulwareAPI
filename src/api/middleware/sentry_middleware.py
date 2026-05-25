@@ -5,12 +5,11 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 import sentry_sdk
 from sentry_sdk import set_tag, set_context
-from src.infrastructure.monitoring import add_breadcrumb, set_user_context
+from src.infrastructure.monitoring import add_breadcrumb
 import time
 import traceback
-from typing import Callable
-import json
 
+from collections.abc import Callable
 
 class SentryMiddleware(BaseHTTPMiddleware):
     """
@@ -181,7 +180,6 @@ class SentryMiddleware(BaseHTTPMiddleware):
                 sentry_sdk.capture_exception(exc)
 
             raise
-
 
 class SentryAsyncContextMiddleware:
     """

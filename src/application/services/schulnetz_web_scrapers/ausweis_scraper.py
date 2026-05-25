@@ -1,8 +1,6 @@
 from bs4 import BeautifulSoup
-from typing import Dict, Optional
 
-
-def scrape_ausweis(html: str) -> Dict[str, Optional[str]]:
+def scrape_ausweis(html: str) -> dict[str, str | None]:
     soup = BeautifulSoup(html, "html.parser")
     info = {}
 

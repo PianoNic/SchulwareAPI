@@ -7,16 +7,13 @@ from src.application.dtos.web_session_dtos import WebScrapeRequestDto
 from src.application.services.env_service import get_env_variable
 from src.application.services.web_session_service import validate_session
 
-
 @dataclass
 class ValidateWebSessionQuery(IQuery[Any]):
     body: WebScrapeRequestDto
 
-
 class ValidateWebSessionHandler(IQueryHandler[ValidateWebSessionQuery, Any]):
     async def handle(self, query: ValidateWebSessionQuery) -> Any:
         return await validate_web_session_query_async(query.body)
-
 
 async def validate_web_session_query_async(body: WebScrapeRequestDto) -> dict:
     base_url = get_env_variable("SCHULNETZ_WEB_BASE_URL")

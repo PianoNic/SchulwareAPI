@@ -1,7 +1,6 @@
 import httpx
 import re
-from typing import Optional, Dict, Tuple
-from urllib.parse import urljoin, urlencode
+
 from bs4 import BeautifulSoup
 from src.infrastructure.logging_config import get_logger
 
@@ -16,8 +15,7 @@ WEB_HEADERS = {
     "Sec-Fetch-Mode": "navigate",
 }
 
-
-async def capture_web_session(schulnetz_base_url: str, code: str, state: str) -> Tuple[Optional[Dict[str, str]], Optional[Dict[str, str]]]:
+async def capture_web_session(schulnetz_base_url: str, code: str, state: str) -> tuple[dict[str, str] | None, dict[str, str] | None]:
     """
     Exchange an OAuth authorization code for a Schulnetz PHP web session.
 
@@ -66,8 +64,7 @@ async def capture_web_session(schulnetz_base_url: str, code: str, state: str) ->
             logger.error(f"Failed to capture web session: {e}")
             return None, None
 
-
-def _extract_session_info(url: str, html: str) -> Optional[Dict[str, str]]:
+def _extract_session_info(url: str, html: str) -> dict[str, str] | None:
     """Extract session-specific parameters (id, transid) and navigation URLs from the landing page."""
     info = {}
 
@@ -101,8 +98,7 @@ def _extract_session_info(url: str, html: str) -> Optional[Dict[str, str]]:
 
     return info if info else None
 
-
-async def scrape_page(schulnetz_base_url: str, cookies: Dict[str, str], pageid: str, session_id: str, transid: str) -> Optional[str]:
+async def scrape_page(schulnetz_base_url: str, cookies: dict[str, str], pageid: str, session_id: str, transid: str) -> str | None:
     """
     Fetch a Schulnetz page using stored session cookies.
 
@@ -142,16 +138,14 @@ async def scrape_page(schulnetz_base_url: str, cookies: Dict[str, str], pageid: 
             logger.error(f"Failed to scrape pageid={pageid}: {e}")
             return None
 
-
-async def validate_session(schulnetz_base_url: str, cookies: Dict[str, str], session_id: str, transid: str) -> bool:
+async def validate_session(schulnetz_base_url: str, cookies: dict[str, str], session_id: str, transid: str) -> bool:
     """Check if a PHP session is still valid."""
     html = await scrape_page(schulnetz_base_url, cookies, "21111", session_id, transid)
     if html is None:
         return False
     return "pageid" in html
 
-
-async def fetch_scheduler_data(schulnetz_base_url: str, cookies: Dict[str, str], session_id: str, transid: str, date: Optional[str] = None) -> Optional[str]:
+async def fetch_scheduler_data(schulnetz_base_url: str, cookies: dict[str, str], session_id: str, transid: str, date: str | None = None) -> str | None:
     """Fetch timetable/agenda data from the scheduler AJAX endpoint."""
     from datetime import datetime, timedelta
 
@@ -193,7 +187,6 @@ async def fetch_scheduler_data(schulnetz_base_url: str, cookies: Dict[str, str],
         except Exception as e:
             logger.error(f"Failed to fetch scheduler data: {e}")
             return None
-
 
 # Page ID constants for known Schulnetz pages
 PAGE_IDS = {

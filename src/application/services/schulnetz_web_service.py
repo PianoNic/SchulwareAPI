@@ -1,5 +1,5 @@
 import httpx
-from typing import Optional, Dict, Any
+from typing import Any
 from src.infrastructure.logging_config import get_logger
 from src.infrastructure.monitoring import monitor_performance, add_breadcrumb, capture_exception
 from src.application.services.env_service import get_env_variable
@@ -14,12 +14,12 @@ class SchulnetzWebService:
         self.base_url = get_env_variable("SCHULNETZ_WEB_BASE_URL")
         self.client_id = get_env_variable("SCHULNETZ_CLIENT_ID")
     
-    def _get_web_session_cookies(self, user_id: str) -> Dict[str, str]:
+    def _get_web_session_cookies(self, user_id: str) -> dict[str, str]:
         """Get web session cookies from stored session data"""
         session_data = token_service.get_session_data(user_id, ApplicationType.WEB_INTERFACE)
         return session_data.get("cookies", {})
     
-    def _get_web_headers(self, user_id: str) -> Dict[str, str]:
+    def _get_web_headers(self, user_id: str) -> dict[str, str]:
         """Get standard headers for web requests"""
         return {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36 OPR/120.0.0.0",
@@ -34,7 +34,7 @@ class SchulnetzWebService:
         }
     
     @monitor_performance("web.scraping.dashboard")
-    async def get_dashboard(self, user_id: str, token: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    async def get_dashboard(self, user_id: str, token: str | None = None) -> dict[str, Any] | None:
         """Get main dashboard data"""
         add_breadcrumb(
             message="Fetching web dashboard",
@@ -77,7 +77,7 @@ class SchulnetzWebService:
     
     @monitor_performance("web.scraping.page")
     async def get_page(self, user_id: str, page_id: str,
-                      additional_params: Dict[str, str] = None, token: Optional[str] = None) -> Optional[Dict[str, Any]]:
+                      additional_params: dict[str, str] = None, token: str | None = None) -> dict[str, Any] | None:
         """Get specific page data by page ID"""
         add_breadcrumb(
             message=f"Fetching web page: {page_id}",
@@ -138,7 +138,7 @@ class SchulnetzWebService:
                 return None
     
     async def proxy_web_request(self, user_id: str, path: str, method: str = "GET",
-                               params: Dict = None, data: Any = None, token: Optional[str] = None) -> Optional[Dict[str, Any]]:
+                               params: Dict = None, data: Any = None, token: str | None = None) -> dict[str, Any] | None:
         """Generic proxy method for web requests - returns structured data"""
         # Check if this is a test token - return mock data
         if token and is_test_token(token):

@@ -1,8 +1,7 @@
 from bs4 import BeautifulSoup
-from typing import List, Dict, Any
+from typing import Any
 
-
-def scrape_home(html: str) -> Dict[str, Any]:
+def scrape_home(html: str) -> dict[str, Any]:
     soup = BeautifulSoup(html, "html.parser")
     return {
         "holidays": _parse_table_by_heading(soup, "Ferienübersicht", ["name", "from", "to"]),
@@ -13,8 +12,7 @@ def scrape_home(html: str) -> Dict[str, Any]:
         "employer_info": _parse_key_value_table(soup, "Angaben zum Lehrbetrieb"),
     }
 
-
-def _parse_table_by_heading(soup: BeautifulSoup, heading: str, field_names: List[str]) -> List[Dict[str, str]]:
+def _parse_table_by_heading(soup: BeautifulSoup, heading: str, field_names: list[str]) -> list[dict[str, str]]:
     h3 = soup.find("h3", string=lambda t: t and heading in t)
     if not h3:
         return []
@@ -36,8 +34,7 @@ def _parse_table_by_heading(soup: BeautifulSoup, heading: str, field_names: List
 
     return items
 
-
-def _parse_key_value_table(soup: BeautifulSoup, heading: str) -> Dict[str, str]:
+def _parse_key_value_table(soup: BeautifulSoup, heading: str) -> dict[str, str]:
     h3 = soup.find("h3", string=lambda t: t and heading in t)
     if not h3:
         return {}

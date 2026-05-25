@@ -4,16 +4,16 @@ from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.starlette import StarletteIntegration
 from sentry_sdk.integrations.httpx import HttpxIntegration
 from sentry_sdk.integrations.logging import LoggingIntegration
+import inspect
 import logging
-from typing import Optional, Dict, Any
+from typing import Any
 from functools import wraps
 from src.application.services.app_config_service import app_config
 
-
 def initialize_sentry(
-    dsn: Optional[str] = None,
-    environment: Optional[str] = None,
-    release: Optional[str] = None,
+    dsn: str | None = None,
+    environment: str | None = None,
+    release: str | None = None,
     debug: bool = False,
     traces_sample_rate: float = 0.1
 ) -> None:
@@ -66,8 +66,7 @@ def initialize_sentry(
 
     logging.info(f"Sentry initialized for environment: {environment}")
 
-
-def before_send_filter(event: Dict[str, Any], hint: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+def before_send_filter(event: dict[str, Any], hint: dict[str, Any]) -> dict[str, Any] | None:
     """
     Filter sensitive data before sending to Sentry.
 
@@ -141,13 +140,12 @@ def before_send_filter(event: Dict[str, Any], hint: Dict[str, Any]) -> Optional[
 
     return event
 
-
 def capture_exception(
     error: Exception,
-    context: Optional[Dict[str, Any]] = None,
+    context: dict[str, Any] | None = None,
     level: str = "error",
-    fingerprint: Optional[list] = None
-) -> Optional[str]:
+    fingerprint: list | None = None
+) -> str | None:
     """
     Capture an exception with additional context.
 
@@ -172,12 +170,11 @@ def capture_exception(
 
         return sentry_sdk.capture_exception(error)
 
-
 def capture_message(
     message: str,
     level: str = "info",
-    context: Optional[Dict[str, Any]] = None
-) -> Optional[str]:
+    context: dict[str, Any] | None = None
+) -> str | None:
     """
     Capture a message event.
 
@@ -196,12 +193,11 @@ def capture_message(
 
         return sentry_sdk.capture_message(message, level=level)
 
-
 def set_user_context(
-    user_id: Optional[str] = None,
-    email: Optional[str] = None,
-    username: Optional[str] = None,
-    ip_address: Optional[str] = None,
+    user_id: str | None = None,
+    email: str | None = None,
+    username: str | None = None,
+    ip_address: str | None = None,
     **extra_data
 ) -> None:
     """
@@ -228,22 +224,19 @@ def set_user_context(
 
     sentry_sdk.set_user(user_data if user_data else None)
 
-
 def set_tag(key: str, value: Any) -> None:
     """Set a tag for all future events."""
     sentry_sdk.set_tag(key, value)
 
-
-def set_context(name: str, value: Dict[str, Any]) -> None:
+def set_context(name: str, value: dict[str, Any]) -> None:
     """Set custom context data."""
     sentry_sdk.set_context(name, value)
 
-
 def add_breadcrumb(
     message: str,
-    category: Optional[str] = None,
+    category: str | None = None,
     level: str = "info",
-    data: Optional[Dict[str, Any]] = None
+    data: dict[str, Any] | None = None
 ) -> None:
     """
     Add a breadcrumb for debugging.
@@ -260,7 +253,6 @@ def add_breadcrumb(
         level=level,
         data=data
     )
-
 
 def monitor_performance(operation: str):
     """
@@ -326,12 +318,9 @@ def monitor_performance(operation: str):
                     )
                     raise
 
-        if asyncio.iscoroutinefunction(func):
+        if inspect.iscoroutinefunction(func):
             return async_wrapper
         else:
             return sync_wrapper
 
     return decorator
-
-
-import asyncio

@@ -1,12 +1,11 @@
-import os
-from typing import Dict, Optional
+
 from pathlib import Path
 
 class AppConfigService:
     """Service to load application configuration from properties file"""
     
     def __init__(self):
-        self._config: Dict[str, str] = {}
+        self._config: dict[str, str] = {}
         self._load_properties()
     
     def _load_properties(self):
@@ -43,7 +42,7 @@ class AppConfigService:
         """Check if debug mode is enabled"""
         return not self.is_production()
 
-    def get_config(self, key: str, default: Optional[str] = None) -> Optional[str]:
+    def get_config(self, key: str, default: str | None = None) -> str | None:
         """Get any configuration value"""
         return self._config.get(key, default)
 

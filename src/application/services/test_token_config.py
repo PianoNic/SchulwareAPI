@@ -8,12 +8,12 @@ Test Token: "test-token-12345"
 """
 
 from datetime import datetime, timedelta
-from typing import Dict, Any, List, Optional
+from typing import Any
 
 # Test Bearer Token - use in Authorization header as: Bearer test-token-12345
 TEST_TOKEN = "test-token-12345"
 
-def get_mock_user_info() -> Dict[str, Any]:
+def get_mock_user_info() -> dict[str, Any]:
     """Generate mock user information matching UserInfoDto"""
     return {
         "id": "test-user-001",
@@ -50,7 +50,7 @@ def get_mock_user_info() -> Dict[str, Any]:
         "additionalClasses": []
     }
 
-def get_mock_events(min_date: Optional[str] = None, max_date: Optional[str] = None) -> List[Dict[str, Any]]:
+def get_mock_events(min_date: str | None = None, max_date: str | None = None) -> list[dict[str, Any]]:
     """Generate mock calendar events matching AgendaDto"""
     today = datetime.now()
 
@@ -117,7 +117,7 @@ def get_mock_events(min_date: Optional[str] = None, max_date: Optional[str] = No
 
     return events
 
-def get_mock_grades() -> List[Dict[str, Any]]:
+def get_mock_grades() -> list[dict[str, Any]]:
     """Generate mock student grades matching GradeDto"""
     return [
         {
@@ -182,7 +182,7 @@ def get_mock_grades() -> List[Dict[str, Any]]:
         }
     ]
 
-def get_mock_absences() -> List[Dict[str, Any]]:
+def get_mock_absences() -> list[dict[str, Any]]:
     """Generate mock absence data matching AbsenceDto"""
     return [
         {
@@ -268,7 +268,7 @@ def get_mock_absences() -> List[Dict[str, Any]]:
         }
     ]
 
-def get_mock_timetable() -> List[Dict[str, Any]]:
+def get_mock_timetable() -> list[dict[str, Any]]:
     """Generate mock weekly timetable using AgendaDto structure"""
     today = datetime.now()
     # Generate a week of timetable entries
@@ -338,7 +338,7 @@ def get_mock_timetable() -> List[Dict[str, Any]]:
     
     return timetable
 
-def get_mock_documents() -> List[Dict[str, Any]]:
+def get_mock_documents() -> list[dict[str, Any]]:
     """Generate mock documents list - returns flexible structure (no specific DTO)"""
     return [
         {
@@ -373,7 +373,7 @@ def get_mock_documents() -> List[Dict[str, Any]]:
         }
     ]
 
-def get_mock_settings() -> List[Dict[str, Any]]:
+def get_mock_settings() -> list[dict[str, Any]]:
     """Generate mock application settings matching SettingDto"""
     return [
         {
@@ -398,7 +398,7 @@ def get_mock_settings() -> List[Dict[str, Any]]:
         }
     ]
 
-def get_mock_exams() -> List[Dict[str, Any]]:
+def get_mock_exams() -> list[dict[str, Any]]:
     """Generate mock exam schedule matching ExamDto"""
     return [
         {
@@ -461,7 +461,7 @@ def get_mock_exams() -> List[Dict[str, Any]]:
         }
     ]
 
-def get_mock_absence_notices() -> List[Dict[str, Any]]:
+def get_mock_absence_notices() -> list[dict[str, Any]]:
     """Generate mock absence notices matching AbsenceNoticeDto"""
     return [
         {
@@ -512,7 +512,7 @@ def get_mock_absence_notices() -> List[Dict[str, Any]]:
         }
     ]
 
-def get_mock_absence_notice_status() -> List[Dict[str, Any]]:
+def get_mock_absence_notice_status() -> list[dict[str, Any]]:
     """Generate mock absence notice status options matching AbsenceNoticeStatusDto"""
     return [
         {
@@ -557,15 +557,15 @@ def get_mock_absence_notice_status() -> List[Dict[str, Any]]:
         }
     ]
 
-def get_mock_notifications() -> List[Dict[str, Any]]:
+def get_mock_notifications() -> list[dict[str, Any]]:
     """Generate mock push notifications (NotificationDto is empty, so flexible structure)"""
     return []  # NotificationDto is an empty class, returns empty list
 
-def get_mock_topics() -> List[Dict[str, Any]]:
+def get_mock_topics() -> list[dict[str, Any]]:
     """Generate mock notification topics (TopicDto is empty, so flexible structure)"""
     return []  # TopicDto is an empty class, returns empty list
 
-def get_mock_lateness() -> List[Dict[str, Any]]:
+def get_mock_lateness() -> list[dict[str, Any]]:
     """Generate mock lateness records matching LatenessDto"""
     return [
         {
@@ -648,7 +648,7 @@ def is_test_token(token: str) -> bool:
     """Check if the provided token is a test token"""
     return token.strip() == TEST_TOKEN
 
-def get_mock_data(data_type: str, **kwargs) -> Optional[Any]:
+def get_mock_data(data_type: str, **kwargs) -> Any | None:
     """
     Get mock data based on type - returns data matching proper DTOs
 
@@ -659,22 +659,22 @@ def get_mock_data(data_type: str, **kwargs) -> Optional[Any]:
     Returns:
         Mock data matching the appropriate DTO structure, or None if type is not recognized
         
-    Note: Most endpoints return List[DTO], but user_info returns a single Dict
+    Note: Most endpoints return list[DTO], but user_info returns a single Dict
     """
     data_generators = {
         "user_info": get_mock_user_info,  # Returns Dict (single UserInfoDto)
-        "events": lambda: get_mock_events(kwargs.get("min_date"), kwargs.get("max_date")),  # Returns List[AgendaDto]
-        "grades": get_mock_grades,  # Returns List[GradeDto]
-        "absences": get_mock_absences,  # Returns List[AbsenceDto]
-        "timetable": get_mock_timetable,  # Returns List[AgendaDto]
-        "documents": get_mock_documents,  # Returns List[Dict] (no specific DTO)
-        "settings": get_mock_settings,  # Returns List[SettingDto]
-        "exams": get_mock_exams,  # Returns List[ExamDto]
-        "absencenotices": get_mock_absence_notices,  # Returns List[AbsenceNoticeDto]
-        "absencenoticestatus": get_mock_absence_notice_status,  # Returns List[AbsenceNoticeStatusDto]
+        "events": lambda: get_mock_events(kwargs.get("min_date"), kwargs.get("max_date")),  # Returns list[AgendaDto]
+        "grades": get_mock_grades,  # Returns list[GradeDto]
+        "absences": get_mock_absences,  # Returns list[AbsenceDto]
+        "timetable": get_mock_timetable,  # Returns list[AgendaDto]
+        "documents": get_mock_documents,  # Returns list[Dict] (no specific DTO)
+        "settings": get_mock_settings,  # Returns list[SettingDto]
+        "exams": get_mock_exams,  # Returns list[ExamDto]
+        "absencenotices": get_mock_absence_notices,  # Returns list[AbsenceNoticeDto]
+        "absencenoticestatus": get_mock_absence_notice_status,  # Returns list[AbsenceNoticeStatusDto]
         "notifications": get_mock_notifications,  # Returns List (empty - NotificationDto is empty)
         "topics": get_mock_topics,  # Returns List (empty - TopicDto is empty)
-        "lateness": get_mock_lateness,  # Returns List[LatenessDto]
+        "lateness": get_mock_lateness,  # Returns list[LatenessDto]
         "cockpitreport": lambda: get_mock_cockpit_report(kwargs.get("report_id", 1)),  # Returns HTML string
     }
 
