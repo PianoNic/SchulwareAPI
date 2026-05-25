@@ -43,8 +43,8 @@ def _custom_operation_id(route: APIRoute) -> str:
     return "-".join(parts) if parts else "root"
 
 app = FastAPI(
-    title="Schulware API Wrapper",
-    description=f"A FastAPI application to wrap Schulware API endpoints.\n\n**Environment:** {app_config.get_environment()}",
+    title="SchulwareAPI",
+    description=f"Wraps Schulnetz to provide a unified and easy-to-use REST API.\n\n**Environment:** {app_config.get_environment()}",
     version=app_config.get_version(),
     redoc_url=None,
     docs_url="/",
