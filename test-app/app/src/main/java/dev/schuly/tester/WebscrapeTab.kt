@@ -177,6 +177,7 @@ class WebscrapeTab : TabSection {
         val page = pageSpinner.selectedItem as String
         val ua = ctx.prefs.getString("web_user_agent", null)
         val apiBase = ctx.getApiBase()
+        val schulnetzBase = ctx.getSchulnetzBase()
         output.text = "POST $apiBase/api/websession/scrape (page=$page)\n"
         ctx.scope.launch {
             val payload = JSONObject().apply {
@@ -187,7 +188,11 @@ class WebscrapeTab : TabSection {
                 if (ua != null) put("user_agent", ua)
             }
             val (status, body) = withContext(Dispatchers.IO) {
-                Net.httpPost("$apiBase/api/websession/scrape", payload.toString())
+                Net.httpPost(
+                    "$apiBase/api/websession/scrape",
+                    payload.toString(),
+                    headers = mapOf("X-Schulnetz-Base-Url" to schulnetzBase),
+                )
             }
             renderJson(status, body)
         }
@@ -205,6 +210,7 @@ class WebscrapeTab : TabSection {
         }
         val ua = ctx.prefs.getString("web_user_agent", null)
         val apiBase = ctx.getApiBase()
+        val schulnetzBase = ctx.getSchulnetzBase()
         output.text = "POST $apiBase/api/websession/validate\n"
         ctx.scope.launch {
             val payload = JSONObject().apply {
@@ -215,7 +221,11 @@ class WebscrapeTab : TabSection {
                 if (ua != null) put("user_agent", ua)
             }
             val (status, body) = withContext(Dispatchers.IO) {
-                Net.httpPost("$apiBase/api/websession/validate", payload.toString())
+                Net.httpPost(
+                    "$apiBase/api/websession/validate",
+                    payload.toString(),
+                    headers = mapOf("X-Schulnetz-Base-Url" to schulnetzBase),
+                )
             }
             renderJson(status, body)
         }

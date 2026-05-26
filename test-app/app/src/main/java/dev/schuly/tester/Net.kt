@@ -5,13 +5,18 @@ import java.net.URL
 
 /** Shared HTTP helpers used by every tab. Sync — caller is expected to wrap in IO dispatcher. */
 object Net {
-    fun httpGet(url: String, bearer: String? = null): Pair<Int, String> = runCatching {
+    fun httpGet(
+        url: String,
+        bearer: String? = null,
+        headers: Map<String, String> = emptyMap(),
+    ): Pair<Int, String> = runCatching {
         val con = (URL(url).openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
             connectTimeout = 15_000
             readTimeout = 60_000
             setRequestProperty("Accept", "application/json")
             if (bearer != null) setRequestProperty("Authorization", "Bearer $bearer")
+            headers.forEach { (k, v) -> setRequestProperty(k, v) }
         }
         try {
             val status = con.responseCode
@@ -21,7 +26,12 @@ object Net {
         } finally { con.disconnect() }
     }.getOrElse { -1 to "Request failed: ${it.message}" }
 
-    fun httpPost(url: String, json: String, bearer: String? = null): Pair<Int, String> = runCatching {
+    fun httpPost(
+        url: String,
+        json: String,
+        bearer: String? = null,
+        headers: Map<String, String> = emptyMap(),
+    ): Pair<Int, String> = runCatching {
         val con = (URL(url).openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             doOutput = true
@@ -30,6 +40,7 @@ object Net {
             setRequestProperty("Content-Type", "application/json")
             setRequestProperty("Accept", "application/json")
             if (bearer != null) setRequestProperty("Authorization", "Bearer $bearer")
+            headers.forEach { (k, v) -> setRequestProperty(k, v) }
         }
         try {
             con.outputStream.use { it.write(json.toByteArray()) }
