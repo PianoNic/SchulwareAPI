@@ -25,7 +25,7 @@ from dataclasses import dataclass
 
 from mediatorx import ICommand, ICommandHandler
 
-from src.application.dtos.refresh_dtos import RefreshTokenRequestDto, RefreshTokenResponseDto
+from src.application.dtos.refresh_dtos import RefreshTokenResponseDto
 from src.infrastructure.logging_config import get_logger
 
 SCHULNETZ_CLIENT_ID = os.getenv("SCHULNETZ_CLIENT_ID", "ppyybShnMerHdtBQ")
@@ -34,7 +34,11 @@ logger = get_logger("refresh_token_command")
 
 @dataclass
 class RefreshTokenCommand(ICommand[RefreshTokenResponseDto]):
-    request: RefreshTokenRequestDto
+    schulnetz_base_url: str
+    context_state: dict | None = None
+    email: str | None = None
+    password: str | None = None
+    user_agent: str | None = None
 
 
 class RefreshTokenHandler(ICommandHandler[RefreshTokenCommand, RefreshTokenResponseDto]):
@@ -45,13 +49,12 @@ class RefreshTokenHandler(ICommandHandler[RefreshTokenCommand, RefreshTokenRespo
     """
 
     async def handle(self, command: RefreshTokenCommand) -> RefreshTokenResponseDto:
-        request = command.request
         async with async_playwright() as pw:
             browser = await pw.chromium.launch(headless=True)
             try:
-                if request.context_state:
-                    cs_cookies = request.context_state.get("cookies", [])
-                    cs_origins = request.context_state.get("origins", [])
+                if command.context_state:
+                    cs_cookies = command.context_state.get("cookies", [])
+                    cs_origins = command.context_state.get("origins", [])
                     domains = sorted({c.get("domain", "") for c in cs_cookies})
                     logger.info(
                         "Refresh: %d cookies across %s, %d localStorage origins",
@@ -59,12 +62,12 @@ class RefreshTokenHandler(ICommandHandler[RefreshTokenCommand, RefreshTokenRespo
                     )
 
                 ctx_kwargs = {}
-                if request.context_state:
-                    ctx_kwargs["storage_state"] = request.context_state
-                if request.user_agent:
+                if command.context_state:
+                    ctx_kwargs["storage_state"] = command.context_state
+                if command.user_agent:
                     # MS binds session cookies to UA — caller MUST send the same UA the
                     # cookies were captured with, otherwise the SSO replay is rejected.
-                    ctx_kwargs["user_agent"] = request.user_agent
+                    ctx_kwargs["user_agent"] = command.user_agent
                 context = await browser.new_context(**ctx_kwargs)
 
                 page = await context.new_page()
@@ -72,25 +75,25 @@ class RefreshTokenHandler(ICommandHandler[RefreshTokenCommand, RefreshTokenRespo
                 state: str | None = None
 
                 try:
-                    await page.goto(request.schulnetz_base_url, wait_until="load", timeout=60_000)
+                    await page.goto(command.schulnetz_base_url, wait_until="load", timeout=60_000)
                     current_url = page.url
 
                     # SSO session expired → need credentials to re-auth via Microsoft.
                     if "login.microsoftonline.com" in current_url:
-                        if not request.email or not request.password:
+                        if not command.email or not command.password:
                             return RefreshTokenResponseDto(
                                 success=False,
-                                message="Microsoft SSO session expired. Email and password required for re-authentication.",
+                                message="Microsoft SSO session expired. Re-authenticate via /api/authenticate/oauth/mobile/url.",
                             )
-                        await _perform_microsoft_sso(page, request)
-                        await page.wait_for_url(f"{request.schulnetz_base_url}*", timeout=30_000)
+                        await _perform_microsoft_sso(page, command.email, command.password)
+                        await page.wait_for_url(f"{command.schulnetz_base_url}*", timeout=30_000)
 
                     current_url = page.url
                     code, state = _extract_code_state(current_url)
 
                     # Some Schulnetz instances need a second hit before the code shows up.
                     if not code:
-                        await page.goto(request.schulnetz_base_url, wait_until="load", timeout=30_000)
+                        await page.goto(command.schulnetz_base_url, wait_until="load", timeout=30_000)
                         code, state = _extract_code_state(page.url)
 
                     if not code:
@@ -100,11 +103,11 @@ class RefreshTokenHandler(ICommandHandler[RefreshTokenCommand, RefreshTokenRespo
                     await page.close()
 
                 # Mobile token exchange via a separate PKCE round-trip.
-                access_token, refresh_token = await _exchange_mobile_tokens(context, request.schulnetz_base_url)
+                access_token, refresh_token = await _exchange_mobile_tokens(context, command.schulnetz_base_url)
 
                 # Capture web session cookies + landing-page params using the original code.
                 session_id, web_user_id, web_trans_id = await _capture_web_session(
-                    request.schulnetz_base_url, code, state
+                    command.schulnetz_base_url, code, state
                 )
 
                 # Snapshot the updated context for the caller to persist.
@@ -129,15 +132,15 @@ class RefreshTokenHandler(ICommandHandler[RefreshTokenCommand, RefreshTokenRespo
 
 # ---------- internals ----------
 
-async def _perform_microsoft_sso(page, request: RefreshTokenRequestDto) -> None:
+async def _perform_microsoft_sso(page, email: str, password: str) -> None:
     email_input = 'input[type="email"], input[name="loginfmt"]'
     await page.wait_for_selector(email_input, timeout=10_000)
-    await page.fill(email_input, request.email)
+    await page.fill(email_input, email)
     await page.click("#idSIButton9")
 
     password_input = 'input[type="password"], input[name="passwd"]'
     await page.wait_for_selector(password_input, timeout=10_000)
-    await page.fill(password_input, request.password)
+    await page.fill(password_input, password)
     await page.click("#idSIButton9")
 
     # "Stay signed in?" prompt is best-effort.
