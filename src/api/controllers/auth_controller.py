@@ -3,7 +3,7 @@ from mediatorx import Mediator
 
 from src.api.auth.auth import generate_oauth_url
 from src.api.controller import controller
-from src.api.dependencies import get_mediator
+from src.api.dependencies import get_mediator, get_schulnetz_base_url
 from src.api.rate_limit import shared_limiter
 from src.application.commands.refresh_token_command import RefreshTokenCommand
 from src.application.dtos.auth_oauth_dtos import (
@@ -34,9 +34,13 @@ class AuthController:
 
     @router.get("/oauth/mobile/url", response_model=MobileOAuthUrlResponseDto)
     @shared_limiter.limit("10/minute")
-    async def generate_mobile_oauth_url(self, request: Request):
+    async def generate_mobile_oauth_url(
+        self,
+        request: Request,
+        base_url: str = Depends(get_schulnetz_base_url),
+    ):
         try:
-            oauth_data = generate_oauth_url(auth_type="mobile", redirect_uri="")
+            oauth_data = generate_oauth_url(base_url=base_url, auth_type="mobile", redirect_uri="")
             return MobileOAuthUrlResponseDto(
                 authorization_url=oauth_data["auth_url"],
                 code_verifier=oauth_data["code_verifier"],
@@ -47,7 +51,12 @@ class AuthController:
 
     @router.post("/oauth/mobile/callback", response_model=MobileCallbackResponseDto)
     @shared_limiter.limit("5/minute")
-    async def mobile_oauth_callback(self, request: Request, callback_data: MobileCallbackRequestDto):
+    async def mobile_oauth_callback(
+        self,
+        request: Request,
+        callback_data: MobileCallbackRequestDto,
+        base_url: str = Depends(get_schulnetz_base_url),
+    ):
         try:
             if callback_data.state:
                 logger.info(f"Mobile callback with state: {callback_data.state[:10]}...")
@@ -56,6 +65,7 @@ class AuthController:
             access_token, refresh_token = await _exchange_code_for_tokens(
                 callback_data.code,
                 callback_data.code_verifier,
+                base_url,
             )
 
             if not access_token:
@@ -72,6 +82,6 @@ class AuthController:
             raise HTTPException(status_code=500, detail=str(e))
 
 
-async def _exchange_code_for_tokens(auth_code: str, code_verifier: str):
+async def _exchange_code_for_tokens(auth_code: str, code_verifier: str, base_url: str):
     from src.api.auth.auth import exchange_code_for_tokens as _exchange
-    return await _exchange(auth_code, code_verifier)
+    return await _exchange(auth_code, code_verifier, base_url)

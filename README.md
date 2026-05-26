@@ -34,6 +34,27 @@ Schulnetz systems.
 API will be live at:
 - **Swagger Docs**: [http://localhost:8000/](http://localhost:8000/)
 
+## 🔑 Per-Request Schulnetz Instance
+
+The target Schulnetz instance is **not** configured server-side. Every request to a
+Schulnetz-backed endpoint (mobile proxy, web session, OAuth URL/callback) must
+include the school's base URL via the `X-Schulnetz-Base-Url` HTTP header:
+
+```http
+GET /api/mobile/grades HTTP/1.1
+Authorization: Bearer <token>
+X-Schulnetz-Base-Url: https://schulnetz.bbbaden.ch
+```
+
+Requests without this header return `400 Bad Request`.
+
+The only exception is `POST /api/authenticate/refresh`, which accepts the base URL
+as a `schulnetz_base_url` field in its JSON body (so a refresh call carries
+everything it needs without extra headers).
+
+This makes a single SchulwareAPI deployment usable for any Schulnetz school
+instance — the caller decides per request.
+
 ## 🐳 Docker & Container Registry Usage
 
 You can run SchulwareAPI easily using Docker or pull prebuilt images from public registries.
@@ -58,7 +79,6 @@ services:
       - "8000:8000"
     environment:
       - PYTHONUNBUFFERED=1
-      - SCHULNETZ_API_BASE_URL=${SCHULNETZ_API_BASE_URL}
       - SCHULNETZ_WEB_BASE_URL=${SCHULNETZ_WEB_BASE_URL}
       - SCHULNETZ_CLIENT_ID=${SCHULNETZ_CLIENT_ID}
     env_file:

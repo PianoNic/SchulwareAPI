@@ -7,7 +7,6 @@ from fastapi import HTTPException, Response
 from fastapi.responses import JSONResponse
 from mediatorx import IQuery, IQueryHandler
 
-from src.application.services.env_service import get_env_variable
 from src.application.services.test_token_config import get_mock_data, is_test_token
 from src.infrastructure.logging_config import get_logger
 from src.infrastructure.monitoring import add_breadcrumb, capture_exception, monitor_performance
@@ -34,6 +33,7 @@ class ProxyMobileRestQuery(IQuery[Any]):
     token: str
     target_url_path: str
     method: str
+    base_url: str = ""
     query_params: list[tuple] | None = None
 
 
@@ -62,8 +62,7 @@ class ProxyMobileRestHandler(IQueryHandler[ProxyMobileRestQuery, Any]):
             return JSONResponse(content=get_mock_data(data_type), status_code=200)
 
         target_url_path = f"/rest/v1/{target_url_path.lstrip('/')}"
-        base_url = get_env_variable("SCHULNETZ_API_BASE_URL")
-        target_url = f"{base_url}{target_url_path}"
+        target_url = f"{query.base_url.rstrip('/')}{target_url_path}"
 
         add_breadcrumb(
             message=f"Mobile API proxy: {method} {target_url_path}",

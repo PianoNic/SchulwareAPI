@@ -3,7 +3,6 @@ from dataclasses import dataclass
 from mediatorx import IQuery, IQueryHandler
 
 from src.application.dtos.web_session_dtos import WebScrapeRequestDto, WebScrapeResponseDto
-from src.application.services.env_service import get_env_variable
 from src.application.services.schulnetz_web_scrapers.absenz_scraper import scrape_absences
 from src.application.services.schulnetz_web_scrapers.agenda_scraper import scrape_agenda
 from src.application.services.schulnetz_web_scrapers.ausweis_scraper import scrape_ausweis
@@ -31,15 +30,13 @@ SCRAPERS = {
 @dataclass
 class ScrapeWebPageQuery(IQuery[WebScrapeResponseDto]):
     body: WebScrapeRequestDto
+    base_url: str = ""
 
 
 class ScrapeWebPageHandler(IQueryHandler[ScrapeWebPageQuery, WebScrapeResponseDto]):
     async def handle(self, query: ScrapeWebPageQuery) -> WebScrapeResponseDto:
         body = query.body
-        # Schulnetz's `/index.php` and `/scheduler_processor.php` live on the
-        # school instance (API base). `SCHULNETZ_WEB_BASE_URL` points at the
-        # PWA host (`schulnetz.web.app`) which is wrong for scraping.
-        base_url = get_env_variable("SCHULNETZ_API_BASE_URL")
+        base_url = query.base_url.rstrip("/")
         cookies = {"PHPSESSID": body.session_id}
 
         if body.page == "schedule":
