@@ -314,17 +314,20 @@ async def get_microsoft_redirect_code(email: str, password: str, state: str, cod
             await context.close()
             await browser.close()
 
-async def exchange_code_for_tokens(auth_code: str, code_verifier: str) -> tuple[str | None, str | None]:
+async def exchange_code_for_tokens(auth_code: str, code_verifier: str, base_url: str) -> tuple[str | None, str | None]:
     """
     Exchange authorization code for access and refresh tokens.
 
     Args:
         auth_code: Authorization code obtained from Microsoft
         code_verifier: PKCE code verifier used in the initial request
+        base_url: Base URL of the target Schulnetz instance (e.g. https://schulnetz.bbbaden.ch)
 
     Returns:
         Tuple of (access_token, refresh_token) or (None, None) if failed
     """
+    if not base_url:
+        raise ValueError("base_url is required for exchange_code_for_tokens")
     httpx_client = httpx.AsyncClient(
         headers={
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36 OPR/120.0.0.0",
@@ -333,7 +336,7 @@ async def exchange_code_for_tokens(auth_code: str, code_verifier: str) -> tuple[
         },
     )
 
-    token_url = "https://schulnetz.bbbaden.ch/token.php"
+    token_url = f"{base_url.rstrip('/')}/token.php"
     token_data = {
         "grant_type": "authorization_code",
         "code": auth_code,
@@ -1277,11 +1280,12 @@ async def authenticate_with_existing_session(session_cookies: dict[str, str], au
             "requires_full_auth": True
         }
 
-def generate_oauth_url(auth_type: str = "mobile", redirect_uri: str = "") -> dict[str, str]:
+def generate_oauth_url(base_url: str, auth_type: str = "mobile", redirect_uri: str = "") -> dict[str, str]:
     """
     Generate OAuth authorization URL for Microsoft login.
 
     Args:
+        base_url: Base URL of the target Schulnetz instance (e.g. https://schulnetz.bbbaden.ch)
         auth_type: Type of authentication - "mobile" or "web"
         redirect_uri: Redirect URI for OAuth callback (empty string for Schulnetz default)
 
@@ -1291,6 +1295,8 @@ def generate_oauth_url(auth_type: str = "mobile", redirect_uri: str = "") -> dic
         - code_verifier: PKCE code verifier (mobile only, client must store this)
         - state: The state parameter for CSRF protection
     """
+    if not base_url:
+        raise ValueError("base_url is required for generate_oauth_url")
     # Schulnetz requires PKCE on both mobile and web flows — the authorize.php
     # endpoint rejects requests that don't include a code_challenge.
     code_verifier, code_challenge = generate_pkce_challenge()
@@ -1308,10 +1314,7 @@ def generate_oauth_url(auth_type: str = "mobile", redirect_uri: str = "") -> dic
         "code_challenge_method": "S256",
     }
 
-    # `authorize.php` lives on the school's Schulnetz instance (API base),
-    # not on the PWA host (`SCHULNETZ_WEB_BASE_URL` points at schulnetz.web.app).
-    api_base = os.getenv("SCHULNETZ_API_BASE_URL", "https://schulnetz.bbbaden.ch")
-    auth_url = f"{api_base}/authorize.php?" + urlencode(auth_params)
+    auth_url = f"{base_url.rstrip('/')}/authorize.php?" + urlencode(auth_params)
 
     logger.info(f"Generated OAuth URL for {auth_type} authentication")
     logger.info(f"Auth URL: {auth_url[:100]}...")

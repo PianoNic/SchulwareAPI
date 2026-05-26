@@ -14,10 +14,12 @@ SchulwareAPI is a unified FastAPI application that provides access to Schulnetz 
 
 ### Environment Setup
 - Copy `.env.example` to `.env` and configure:
-  - `SCHULNETZ_API_BASE_URL`: Base URL for the Schulnetz API
-  - `SCHULNETZ_WEB_BASE_URL`: Base URL for web scraping
+  - `SCHULNETZ_WEB_BASE_URL`: Base URL for web scraping (PWA host)
   - `SCHULNETZ_CLIENT_ID`: Client ID for API access
   - `SENTRY_DSN`: (Optional) GlitchTip Data Source Name for error reporting
+- The per-school API base URL is **not** configured here. Clients pass it
+  per-request via the `X-Schulnetz-Base-Url` header (or `schulnetz_base_url`
+  body field on `/api/authenticate/refresh`).
 
 ### Dependencies
 - Install: `pip install -r requirements.txt`
@@ -44,7 +46,7 @@ src/
 │   ├── queries/               # Query handlers
 │   └── services/              # Business logic services
 ├── domain/                    # Domain models
-└── infrastructure/            # Database and logging config
+└── infrastructure/            # Logging and monitoring config
 ```
 
 ### Controller Pattern
@@ -53,21 +55,22 @@ Controllers use `SchulwareAPIRouter` which auto-generates paths:
 - Tags generated from filename: `auth_controller.py` → "Auth"
 - Rate limiting applied via `slowapi`
 
-### Services Architecture
-- **Mobile Service**: `schulnetz_mobile_service.py` - REST API client
-- **Web Service**: `schulnetz_web_service.py` - Web scraping with Playwright
-- **Token Service**: JWT token management for authentication
-- **DB Service**: Peewee ORM with SQLite database
+### Application Layer (CQRS via MediatorX)
+- **Commands**: `src/application/commands/` — state-changing operations (e.g. `CaptureWebSessionCommand`, `RefreshTokenCommand`)
+- **Queries**: `src/application/queries/` — read operations (e.g. `ProxyMobileRestQuery`, `ScrapeWebPageQuery`)
+- Each command/query is a dataclass paired with a handler; dispatched via `mediator.send(...)` from controllers
+- Handler registration is centralized in `src/api/dependencies.py`
 
 ### Authentication Flow
-- Unified authentication command supports both mobile and web flows
-- JWT tokens issued via `token_service.py`
-- Bearer token authentication in API endpoints
+- Stateless: the caller owns persistence of OAuth tokens and browser `context_state`
+- `/api/authenticate/oauth/mobile/url` + `/callback` for first-time PKCE flow
+- `/api/authenticate/refresh` for passwordless refresh using stored `context_state`
+- Bearer token authentication on mobile-proxy endpoints
 
 ## Key Technologies
 - **FastAPI**: Web framework with auto-generated OpenAPI docs
-- **Playwright**: Web scraping for Schulnetz web interface  
-- **Peewee**: Lightweight ORM for SQLite database
+- **MediatorX**: CQRS mediator for command/query dispatch
+- **Playwright**: Headless browser for OAuth refresh and web scraping
 - **SlowAPI**: Rate limiting middleware
 - **Uvicorn**: ASGI server for production
 
@@ -89,11 +92,7 @@ Controllers use `SchulwareAPIRouter` which auto-generates paths:
 - **Request Tracking**: Automatic capture of request method, path, duration, and status
 - **Slow Request Detection**: Alerts for requests taking more than 5 seconds
 
-## Testing
-- Test files located in `src/tests/`
-- Run tests with standard pytest commands (no specific test runner configured)
-
-## Database
-- SQLite database: `schulware.db`
-- Models in `src/domain/` and `src/infrastructure/database.py`
-- Auto-setup on application startup via `setup_db()`
+## State
+SchulwareAPI is **stateless** — there is no database. Per-user data (OAuth tokens,
+browser context_state, web session cookies) is held by the calling client and
+passed back in on each request.

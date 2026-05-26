@@ -42,9 +42,32 @@ def _custom_operation_id(route: APIRoute) -> str:
         parts = parts[1:]
     return "-".join(parts) if parts else "root"
 
+_API_DESCRIPTION = f"""
+Wraps Schulnetz to provide a unified and easy-to-use REST API.
+
+## Per-Request Schulnetz Instance
+
+Every Schulnetz-backed endpoint (mobile proxy, web session, OAuth URL/callback)
+requires the school's base URL on each request via the **`X-Schulnetz-Base-Url`**
+HTTP header:
+
+```
+X-Schulnetz-Base-Url: https://schulnetz.bbbaden.ch
+```
+
+Requests without this header return `400 Bad Request`. This lets a single
+SchulwareAPI deployment serve any Schulnetz school instance — the caller
+decides per request.
+
+The only exception is `POST /api/authenticate/refresh`, which carries the base
+URL as a `schulnetz_base_url` field in its JSON body instead.
+
+**Environment:** {app_config.get_environment()}
+""".strip()
+
 app = FastAPI(
     title="SchulwareAPI",
-    description=f"Wraps Schulnetz to provide a unified and easy-to-use REST API.\n\n**Environment:** {app_config.get_environment()}",
+    description=_API_DESCRIPTION,
     version=app_config.get_version(),
     redoc_url=None,
     docs_url="/",
