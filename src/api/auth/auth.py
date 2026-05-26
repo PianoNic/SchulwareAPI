@@ -47,7 +47,12 @@ def generate_auth_params(state: str, code_challenge: str, nonce: str) -> dict[st
         "client_id": SCHULNETZ_CLIENT_ID,
         "state": state,
         "redirect_uri": "",  # Empty as shown in curl commands
-        "scope": "openid ",  # Note the trailing space as in curl
+        # SPIKE (#121): requesting `offline_access` to find out whether Schulnetz
+        # will issue a long-lived refresh_token that can be redeemed via the
+        # `grant_type=refresh_token` flow at /token.php — which would let us
+        # skip Playwright for token refreshes entirely. The original value here
+        # was "openid " (trailing space, matching the captured curl).
+        "scope": "openid offline_access",
         "code_challenge": code_challenge,
         "code_challenge_method": "S256",
         "nonce": nonce
@@ -1308,7 +1313,8 @@ def generate_oauth_url(base_url: str, auth_type: str = "mobile", redirect_uri: s
         "client_id": SCHULNETZ_CLIENT_ID,
         "state": state,
         "redirect_uri": redirect_uri,
-        "scope": "openid ",  # trailing space matches the original Schulnetz flow
+        # SPIKE (#121): see comment at the other call site. Originally "openid ".
+        "scope": "openid offline_access",
         "nonce": nonce,
         "code_challenge": code_challenge,
         "code_challenge_method": "S256",

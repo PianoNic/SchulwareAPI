@@ -16,6 +16,10 @@ from src.application.commands.refresh_token_command import (
     RefreshTokenCommand,
     RefreshTokenHandler,
 )
+from src.application.commands.refresh_token_grant_command import (
+    RefreshTokenGrantCommand,
+    RefreshTokenGrantHandler,
+)
 from src.application.queries.get_app_info_query import (
     GetAppInfoQuery,
     GetAppInfoHandler,
@@ -59,6 +63,7 @@ def build_mediator() -> Mediator:
     # Commands
     m.register(CaptureWebSessionCommand, CaptureWebSessionHandler)
     m.register(RefreshTokenCommand, RefreshTokenHandler)
+    m.register(RefreshTokenGrantCommand, RefreshTokenGrantHandler)
 
     # Queries
     m.register(GetAppInfoQuery, GetAppInfoHandler)

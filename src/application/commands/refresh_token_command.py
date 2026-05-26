@@ -168,7 +168,8 @@ async def _exchange_mobile_tokens(context, schulnetz_base_url: str) -> tuple[str
         "client_id": SCHULNETZ_CLIENT_ID,
         "state": secrets.token_hex(16),
         "redirect_uri": "",
-        "scope": "openid ",
+        # SPIKE (#121): added offline_access — see auth.py for rationale.
+        "scope": "openid offline_access",
         "code_challenge": code_challenge,
         "code_challenge_method": "S256",
         "nonce": secrets.token_hex(16),

@@ -6,6 +6,9 @@ __pycache__/
 # Playwright MCP debug captures
 .playwright-mcp/
 
+# Scratch / local-only checkouts (e.g. cloned reference repos)
+_tmp/
+
 # C extensions
 *.so
 

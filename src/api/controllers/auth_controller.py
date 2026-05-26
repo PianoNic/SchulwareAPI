@@ -6,12 +6,15 @@ from src.api.controller import controller
 from src.api.dependencies import get_mediator, get_schulnetz_base_url
 from src.api.rate_limit import shared_limiter
 from src.application.commands.refresh_token_command import RefreshTokenCommand
+from src.application.commands.refresh_token_grant_command import RefreshTokenGrantCommand
 from src.application.dtos.auth_oauth_dtos import (
     MobileCallbackRequestDto,
     MobileCallbackResponseDto,
     MobileOAuthUrlResponseDto,
 )
 from src.application.dtos.refresh_dtos import (
+    RefreshTokenGrantRequestDto,
+    RefreshTokenGrantResponseDto,
     RefreshTokenRequestDto,
     RefreshTokenResponseDto,
     RefreshTokenWithCredentialsRequestDto,
@@ -39,6 +42,37 @@ class AuthController:
             schulnetz_base_url=body.schulnetz_base_url,
             context_state=body.context_state,
             user_agent=body.user_agent,
+        ))
+
+    @router.post(
+        "/refresh-token",
+        response_model=RefreshTokenGrantResponseDto,
+        description=(
+            "## ⚗️ EXPERIMENTAL — spike for [#121]"
+            "(https://github.com/PianoNic/SchulwareAPI/issues/121)\n\n"
+            "Direct OAuth2 **refresh_token grant** against `/token.php` — no "
+            "Playwright, no Chromium, milliseconds per call. If Schulnetz "
+            "honours this grant, it becomes the preferred refresh path and "
+            "`/refresh` (context_state replay) only stays around as a "
+            "fallback.\n\n"
+            "**Requires** a `refresh_token` from an authorization flow that "
+            "included the `offline_access` scope. This branch enables that "
+            "scope at every OAuth call site, so any token captured after "
+            "deploying it qualifies.\n\n"
+            "**Do not rely on this in production yet** — it's here to be "
+            "tested. The response includes the raw `/token.php` body in "
+            "`raw_response` so you can inspect exactly what Schulnetz returns."
+        ),
+    )
+    @shared_limiter.limit("10/minute")
+    async def refresh_with_grant(
+        self,
+        request: Request,
+        body: RefreshTokenGrantRequestDto,
+    ):
+        return await self.mediator.send(RefreshTokenGrantCommand(
+            schulnetz_base_url=body.schulnetz_base_url.rstrip("/"),
+            refresh_token=body.refresh_token,
         ))
 
     @router.post(
