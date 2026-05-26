@@ -45,7 +45,6 @@ src/
 │   ├── dtos/                  # Data transfer objects
 │   ├── queries/               # Query handlers
 │   └── services/              # Business logic services
-├── domain/                    # Domain models
 └── infrastructure/            # Logging and monitoring config
 ```
 
