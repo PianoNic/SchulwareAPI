@@ -14,6 +14,7 @@ from src.application.dtos.auth_oauth_dtos import (
 from src.application.dtos.refresh_dtos import (
     RefreshTokenRequestDto,
     RefreshTokenResponseDto,
+    RefreshTokenWithCredentialsRequestDto,
 )
 from src.infrastructure.logging_config import get_logger
 
@@ -28,9 +29,47 @@ class AuthController:
     @router.post("/refresh", response_model=RefreshTokenResponseDto)
     @shared_limiter.limit("5/minute")
     async def refresh_token(self, request: Request, body: RefreshTokenRequestDto):
-        """Stateless token + session refresh. Caller provides `context_state` from a
-        prior call and receives an updated `context_state` to persist."""
-        return await self.mediator.send(RefreshTokenCommand(body))
+        """Stateless token + session refresh using a stored browser context.
+
+        Caller provides `context_state` from a prior call and receives an
+        updated `context_state` to persist. No credentials are sent. If the
+        stored context has expired, re-authenticate via
+        `/api/authenticate/oauth/mobile/url`."""
+        return await self.mediator.send(RefreshTokenCommand(
+            schulnetz_base_url=body.schulnetz_base_url,
+            context_state=body.context_state,
+            user_agent=body.user_agent,
+        ))
+
+    @router.post(
+        "/refresh-with-credentials",
+        response_model=RefreshTokenResponseDto,
+        deprecated=True,
+        description=(
+            "## ⚠️ DEPRECATED — DO NOT USE\n\n"
+            "Refreshes tokens by replaying a **full Microsoft SSO login with raw "
+            "credentials** through a headless browser. Provided only as a "
+            "last-resort fallback for the very first refresh after cold-start.\n\n"
+            "**Use `/api/authenticate/refresh` with a stored `context_state` "
+            "for every subsequent call.** Storing the user's password long-term "
+            "to call this endpoint repeatedly defeats the entire stateless "
+            "design and exposes the credentials unnecessarily.\n\n"
+            "Preferred cold-start path: drive the OAuth flow via "
+            "`/api/authenticate/oauth/mobile/url` and capture `context_state` "
+            "from the resulting browser session, then use `/refresh` from "
+            "then on."
+        ),
+    )
+    @shared_limiter.limit("2/minute")
+    async def refresh_with_credentials(
+        self, request: Request, body: RefreshTokenWithCredentialsRequestDto
+    ):
+        return await self.mediator.send(RefreshTokenCommand(
+            schulnetz_base_url=body.schulnetz_base_url,
+            email=body.email,
+            password=body.password,
+            user_agent=body.user_agent,
+        ))
 
     @router.get("/oauth/mobile/url", response_model=MobileOAuthUrlResponseDto)
     @shared_limiter.limit("10/minute")
