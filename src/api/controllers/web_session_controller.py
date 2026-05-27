@@ -10,6 +10,7 @@ from src.application.dtos.web_session_dtos import (
     WebScrapeResponseDto,
     WebSessionRequestDto,
     WebSessionResponseDto,
+    WebValidateResponseDto,
 )
 from src.application.queries.scrape_web_page_query import ScrapeWebPageQuery
 from src.application.queries.validate_web_session_query import ValidateWebSessionQuery
@@ -53,7 +54,7 @@ class WebSessionController:
         """
         return await self.mediator.send(ScrapeWebPageQuery(body, base_url=base_url))
 
-    @router.post("/validate")
+    @router.post("/validate", response_model=WebValidateResponseDto)
     @shared_limiter.limit("10/minute")
     async def validate(
         self,

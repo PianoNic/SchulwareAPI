@@ -15,6 +15,7 @@ import android.widget.TextView
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 import org.json.JSONObject
 
 /**
@@ -59,6 +60,7 @@ class WebscrapeTab : TabSection {
         }
         val scrapeBtn = Button(ctx.activity).apply { text = "2. Scrape selected page" }
         val validateBtn = Button(ctx.activity).apply { text = "3. Validate session" }
+        val dumpCookiesBtn = Button(ctx.activity).apply { text = "Dump all cookies (diagnostic)" }
 
         output = TextView(ctx.activity).apply {
             text = renderStored(ctx)
@@ -67,12 +69,57 @@ class WebscrapeTab : TabSection {
         }
         val scroll = ScrollView(ctx.activity).apply { addView(output) }
 
-        listOf<View>(captureBtn, pageSpinner, scrapeBtn, validateBtn, scroll).forEach { root.addView(it) }
+        listOf<View>(captureBtn, pageSpinner, scrapeBtn, validateBtn, dumpCookiesBtn, scroll)
+            .forEach { root.addView(it) }
 
         captureBtn.setOnClickListener { startWebLogin(ctx) }
         scrapeBtn.setOnClickListener { performScrape(ctx) }
         validateBtn.setOnClickListener { performValidate(ctx) }
+        dumpCookiesBtn.setOnClickListener { dumpAllCookies(ctx) }
         return root
+    }
+
+    /**
+     * Walk every origin involved in the OAuth chain and dump whatever the
+     * WebView's CookieManager knows — including HttpOnly cookies that
+     * document.cookie / DevTools' "Cookies" tab on the Schulnetz host wouldn't
+     * surface. This is a diagnostic to find out which Microsoft (or other)
+     * cookies survive on the device after a successful WebView login.
+     */
+    private fun dumpAllCookies(ctx: TabContext) {
+        val cm = CookieManager.getInstance().apply { flush() }
+        val origins = listOf(
+            ctx.getSchulnetzBase(),
+            "https://schulnetz.web.app",
+            "https://login.microsoftonline.com",
+            "https://login.microsoft.com",
+            "https://login.live.com",
+            "https://login.windows.net",
+            "https://account.live.com",
+            "https://account.microsoft.com",
+            "https://aadcdn.msauth.net",
+            "https://aadcdn.msftauth.net",
+            "https://device.login.microsoftonline.com",
+            "https://autologon.microsoftazuread-sso.com",
+        )
+        val sb = StringBuilder()
+        sb.append("=== Cookie dump @ ").append(System.currentTimeMillis()).append(" ===\n")
+        for (origin in origins) {
+            val raw = cm.getCookie(origin)
+            if (raw.isNullOrEmpty()) {
+                sb.append("\n").append(origin).append("\n  (no cookies)\n")
+                continue
+            }
+            sb.append("\n").append(origin).append("\n")
+            raw.split(";").map { it.trim() }.filter { it.isNotEmpty() }.forEach { pair ->
+                val parts = pair.split("=", limit = 2)
+                val name = parts.getOrNull(0) ?: "?"
+                val value = parts.getOrNull(1) ?: ""
+                val preview = if (value.length > 60) "${value.take(60)}… (${value.length} chars)" else value
+                sb.append("  ").append(name).append(" = ").append(preview).append("\n")
+            }
+        }
+        output.text = sb
     }
 
     // ----- WebView login + client-side session extraction -----
@@ -176,6 +223,7 @@ class WebscrapeTab : TabSection {
         }
         val page = pageSpinner.selectedItem as String
         val ua = ctx.prefs.getString("web_user_agent", null)
+        val extra = extractAdditionalCookies(ctx)
         val apiBase = ctx.getApiBase()
         val schulnetzBase = ctx.getSchulnetzBase()
         output.text = "POST $apiBase/api/websession/scrape (page=$page)\n"
@@ -186,6 +234,7 @@ class WebscrapeTab : TabSection {
                 put("transid", transid)
                 put("page", page)
                 if (ua != null) put("user_agent", ua)
+                if (extra != null) put("additional_cookies", extra)
             }
             val (status, body) = withContext(Dispatchers.IO) {
                 Net.httpPost(
@@ -194,6 +243,7 @@ class WebscrapeTab : TabSection {
                     headers = mapOf("X-Schulnetz-Base-Url" to schulnetzBase),
                 )
             }
+            persistRefreshed(ctx, body)
             renderJson(status, body)
         }
     }
@@ -209,6 +259,7 @@ class WebscrapeTab : TabSection {
             return
         }
         val ua = ctx.prefs.getString("web_user_agent", null)
+        val extra = extractAdditionalCookies(ctx)
         val apiBase = ctx.getApiBase()
         val schulnetzBase = ctx.getSchulnetzBase()
         output.text = "POST $apiBase/api/websession/validate\n"
@@ -219,6 +270,7 @@ class WebscrapeTab : TabSection {
                 put("transid", transid)
                 put("page", "home") // ignored by handler but DTO requires it
                 if (ua != null) put("user_agent", ua)
+                if (extra != null) put("additional_cookies", extra)
             }
             val (status, body) = withContext(Dispatchers.IO) {
                 Net.httpPost(
@@ -227,8 +279,61 @@ class WebscrapeTab : TabSection {
                     headers = mapOf("X-Schulnetz-Base-Url" to schulnetzBase),
                 )
             }
+            persistRefreshed(ctx, body)
             renderJson(status, body)
         }
+    }
+
+    /**
+     * Collect Microsoft SSO cookies straight from the shared WebView's
+     * CookieManager at send time. Forwarding these lets the server complete
+     * Schulnetz's silent re-SSO redirect chain (observed on bs-aarau via the
+     * `login.microsoftonline.com/.../reprocess` hop). Reads at call time
+     * instead of from the Auth tab's stored context_state so this works
+     * regardless of which tab performed the OAuth login.
+     */
+    private fun extractAdditionalCookies(ctx: TabContext): JSONArray? {
+        val cm = CookieManager.getInstance().apply { flush() }
+        val origins = listOf(
+            "https://login.microsoftonline.com",
+            "https://login.microsoft.com",
+            "https://login.live.com",
+            "https://login.windows.net",
+            "https://device.login.microsoftonline.com",
+            "https://autologon.microsoftazuread-sso.com",
+        )
+        val arr = JSONArray()
+        for (origin in origins) {
+            val raw = cm.getCookie(origin) ?: continue
+            val host = android.net.Uri.parse(origin).host ?: continue
+            raw.split(";").map { it.trim() }.filter { it.isNotEmpty() }.forEach { pair ->
+                val parts = pair.split("=", limit = 2)
+                if (parts.size != 2 || parts[0].isEmpty()) return@forEach
+                arr.put(JSONObject().apply {
+                    put("name", parts[0])
+                    put("value", parts[1])
+                    put("domain", host)
+                })
+            }
+        }
+        return if (arr.length() == 0) null else arr
+    }
+
+    /**
+     * Some Schulnetz instances rotate id/transid per-request (one-shot CSRF).
+     * The server returns the next pair as `refreshed_id` / `refreshed_transid`;
+     * persist them so the next call uses fresh values. Instances that don't
+     * rotate return the same values — harmless overwrite.
+     */
+    private fun persistRefreshed(ctx: TabContext, body: String) {
+        val obj = try { JSONObject(body) } catch (_: Exception) { return }
+        val newId = obj.optString("refreshed_id", "").takeIf { it.isNotEmpty() }
+        val newTransid = obj.optString("refreshed_transid", "").takeIf { it.isNotEmpty() }
+        if (newId == null && newTransid == null) return
+        val edit = ctx.prefs.edit()
+        if (newId != null) edit.putString("web_id", newId)
+        if (newTransid != null) edit.putString("web_transid", newTransid)
+        edit.apply()
     }
 
     private fun renderJson(status: Int, body: String) {

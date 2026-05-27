@@ -24,9 +24,30 @@ class WebScrapeRequestDto(BaseModel):
     id: str = Field(..., description="Session id parameter from URL")
     transid: str = Field(..., description="Transaction id parameter from URL")
     user_agent: str | None = Field(None, description="The WebView UA that created the session (Schulnetz binds PHPSESSID to UA)")
+    additional_cookies: list[dict[str, str]] | None = Field(
+        None,
+        description=(
+            "Optional extra cookies (typically Microsoft SSO cookies from the "
+            "captured context_state) to attach on each request. Required for "
+            "Schulnetz instances that perform silent re-SSO through Microsoft "
+            "mid-flight (e.g. bs-aarau). Each entry: {name, value, domain}."
+        ),
+    )
 
 class WebScrapeResponseDto(BaseModel):
     """Response DTO for scraped page."""
     success: bool
     data: Any | None = None
     message: str | None = None
+    # Some Schulnetz instances rotate id/transid per-request (one-shot CSRF).
+    # When present, callers MUST persist these and use them on the next call.
+    refreshed_id: str | None = None
+    refreshed_transid: str | None = None
+
+
+class WebValidateResponseDto(BaseModel):
+    """Response DTO for session validation."""
+    valid: bool
+    message: str
+    refreshed_id: str | None = None
+    refreshed_transid: str | None = None
