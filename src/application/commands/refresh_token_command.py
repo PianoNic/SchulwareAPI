@@ -52,9 +52,10 @@ class RefreshTokenHandler(ICommandHandler[RefreshTokenCommand, RefreshTokenRespo
         async with async_playwright() as pw:
             browser = await pw.chromium.launch(headless=True)
             try:
-                if command.context_state:
-                    cs_cookies = command.context_state.get("cookies", [])
-                    cs_origins = command.context_state.get("origins", [])
+                context_state = _normalize_state(command.context_state)
+                if context_state:
+                    cs_cookies = context_state.get("cookies", [])
+                    cs_origins = context_state.get("origins", [])
                     domains = sorted({c.get("domain", "") for c in cs_cookies})
                     logger.info(
                         "Refresh: %d cookies across %s, %d localStorage origins",
@@ -62,8 +63,8 @@ class RefreshTokenHandler(ICommandHandler[RefreshTokenCommand, RefreshTokenRespo
                     )
 
                 ctx_kwargs = {}
-                if command.context_state:
-                    ctx_kwargs["storage_state"] = command.context_state
+                if context_state:
+                    ctx_kwargs["storage_state"] = context_state
                 if command.user_agent:
                     # MS binds session cookies to UA — caller MUST send the same UA the
                     # cookies were captured with, otherwise the SSO replay is rejected.
@@ -131,6 +132,28 @@ class RefreshTokenHandler(ICommandHandler[RefreshTokenCommand, RefreshTokenRespo
                 await browser.close()
 
 # ---------- internals ----------
+
+def _normalize_state(state: dict | None) -> dict | None:
+    """Coerce a context_state into the shape Playwright's storage_state expects.
+
+    Playwright requires `cookies` and `origins` to be arrays. A buggy caller may
+    persist them as objects/dicts (e.g. a keyed map, or arrays mangled into `{}`
+    by a serializer that can't handle the value type). When we get a dict, fall
+    back to its values; anything else non-list becomes an empty list so
+    `new_context` never rejects the shape.
+    """
+    if not state:
+        return state
+
+    def as_list(value):
+        if isinstance(value, list):
+            return value
+        if isinstance(value, dict):
+            return list(value.values())
+        return []
+
+    return {**state, "cookies": as_list(state.get("cookies")), "origins": as_list(state.get("origins"))}
+
 
 async def _perform_microsoft_sso(page, email: str, password: str) -> None:
     email_input = 'input[type="email"], input[name="loginfmt"]'
