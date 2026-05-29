@@ -111,7 +111,15 @@ def _extract_session_info(url: str, html: str) -> dict[str, str] | None:
 
     return info if info else None
 
-async def scrape_page(schulnetz_base_url: str, cookies: dict[str, str], pageid: str, session_id: str, transid: str, user_agent: str | None = None) -> str | None:
+async def scrape_page(
+    schulnetz_base_url: str,
+    cookies: dict[str, str],
+    pageid: str,
+    session_id: str,
+    transid: str,
+    user_agent: str | None = None,
+    additional_cookies: list[dict[str, str]] | None = None,
+) -> tuple[str | None, str | None, str | None]:
     """
     Fetch a Schulnetz page using stored session cookies.
 
@@ -126,7 +134,13 @@ async def scrape_page(schulnetz_base_url: str, cookies: dict[str, str], pageid: 
             session MUST pass the WebView's UA.
 
     Returns:
-        HTML content or None if session expired
+        Tuple of (html, refreshed_id, refreshed_transid). `html` is None when the
+        session is no longer valid. The refreshed id/transid come from the
+        navigation links in the response and rotate per-request on some
+        instances (e.g. bs-aarau treats `transid` as a one-shot CSRF nonce —
+        reusing the same value yields a login redirect on the next call).
+        Callers should persist the refreshed values and use them on the next
+        request. Returns (None, None, None) on expired session or error.
     """
     url = f"{schulnetz_base_url}/index.php"
     params = {"pageid": pageid, "id": session_id, "transid": transid}
@@ -139,29 +153,101 @@ async def scrape_page(schulnetz_base_url: str, cookies: dict[str, str], pageid: 
     if user_agent:
         headers["User-Agent"] = user_agent
 
-    async with httpx.AsyncClient(headers=headers, cookies=cookies, follow_redirects=True, timeout=30.0) as client:
+    # Hydrate the cookie jar with the Schulnetz cookies on the school host plus
+    # any additional cookies the caller supplies (typically Microsoft SSO
+    # cookies from the captured `context_state`). Some instances (e.g.
+    # bs-aarau) lean on Microsoft's silent-SSO `/reprocess` endpoint to mint a
+    # fresh OAuth code mid-flight when PHPSESSID gets shaky; without those MS
+    # cookies the redirect chain dead-ends at the login form.
+    jar = httpx.Cookies()
+    schulnetz_host = httpx.URL(schulnetz_base_url).host
+    for name, value in cookies.items():
+        jar.set(name, value, domain=schulnetz_host)
+    extra_by_domain: dict[str, list[str]] = {}
+    if additional_cookies:
+        for c in additional_cookies:
+            name = c.get("name")
+            value = c.get("value")
+            domain = c.get("domain") or ""
+            if not name or value is None:
+                continue
+            normalized = domain.lstrip(".")
+            jar.set(name, value, domain=normalized)
+            extra_by_domain.setdefault(normalized, []).append(name)
+    if extra_by_domain:
+        summary = ", ".join(f"{d}: {len(n)}" for d, n in extra_by_domain.items())
+        logger.info(f"Forwarding additional cookies — {summary}")
+    else:
+        logger.info("No additional_cookies forwarded on this request")
+
+    async with httpx.AsyncClient(headers=headers, cookies=jar, follow_redirects=True, timeout=30.0) as client:
         try:
             response = await client.get(url, params=params)
 
             if response.status_code == 200:
-                if "login.microsoftonline.com" in str(response.url):
-                    logger.warning("Session expired — redirected to Microsoft login")
-                    return None
-                return response.text
+                final_url = str(response.url)
+                # Schulnetz instances differ in how they signal an expired session:
+                # bbbaden bounces straight to login.microsoftonline.com, but bs-aarau
+                # first lands on /loginto.php?mode=7 (its own "please log in" page)
+                # and only then to Microsoft. Both indicate the cookies are no
+                # longer authenticated.
+                if "login.microsoftonline.com" in final_url or "/loginto.php" in final_url:
+                    logger.warning(f"Session expired — redirected to {final_url}")
+                    return None, None, None
+                refreshed_id, refreshed_transid = _extract_refreshed_session(response.text)
+                return response.text, refreshed_id, refreshed_transid
 
             logger.warning(f"Unexpected status {response.status_code} for pageid={pageid}")
-            return None
+            return None, None, None
 
         except Exception as e:
             logger.error(f"Failed to scrape pageid={pageid}: {e}")
-            return None
+            return None, None, None
 
-async def validate_session(schulnetz_base_url: str, cookies: dict[str, str], session_id: str, transid: str, user_agent: str | None = None) -> bool:
-    """Check if a PHP session is still valid."""
-    html = await scrape_page(schulnetz_base_url, cookies, "21111", session_id, transid, user_agent=user_agent)
-    if html is None:
-        return False
-    return "pageid" in html
+
+def _extract_refreshed_session(html: str) -> tuple[str | None, str | None]:
+    """Pull a fresh (id, transid) pair from any pageid nav link in the response."""
+    if not html:
+        return None, None
+    match = re.search(r'href="[^"]*[?&]id=([a-f0-9]+)[^"]*[?&]transid=([a-f0-9]+)', html)
+    if match:
+        return match.group(1), match.group(2)
+    id_match = re.search(r'[?&]id=([a-f0-9]+)', html)
+    transid_match = re.search(r'[?&]transid=([a-f0-9]+)', html)
+    return (
+        id_match.group(1) if id_match else None,
+        transid_match.group(1) if transid_match else None,
+    )
+
+async def validate_session(
+    schulnetz_base_url: str,
+    cookies: dict[str, str],
+    session_id: str,
+    transid: str,
+    user_agent: str | None = None,
+    additional_cookies: list[dict[str, str]] | None = None,
+) -> tuple[bool, str | None, str | None]:
+    """Check if a PHP session is still valid.
+
+    Returns (is_valid, refreshed_id, refreshed_transid). The id/transid come
+    from nav links on the response page; on Schulnetz instances that rotate
+    `transid` per-request, the caller MUST use the refreshed values for the
+    next call or the session will appear to die after one request.
+
+    `scrape_page` already returns None when the request is bounced to a login
+    page (Microsoft or `/loginto.php`), so a non-None response is sufficient to
+    consider the session live.
+    """
+    html, refreshed_id, refreshed_transid = await scrape_page(
+        schulnetz_base_url,
+        cookies,
+        "21111",
+        session_id,
+        transid,
+        user_agent=user_agent,
+        additional_cookies=additional_cookies,
+    )
+    return html is not None, refreshed_id, refreshed_transid
 
 async def fetch_scheduler_data(schulnetz_base_url: str, cookies: dict[str, str], session_id: str, transid: str, date: str | None = None, user_agent: str | None = None) -> str | None:
     """Fetch timetable/agenda data from the scheduler AJAX endpoint."""

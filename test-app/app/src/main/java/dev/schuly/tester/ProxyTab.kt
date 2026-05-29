@@ -84,11 +84,14 @@ class ProxyTab : TabSection {
         }
         val path = endpoints[endpointSpinner.selectedItemPosition].second
         val apiBase = ctx.getApiBase()
+        val schulnetzBase = ctx.getSchulnetzBase()
         val url = "$apiBase/api/mobile/$path"
-        output.text = "GET $url\n"
+        output.text = "GET $url\nX-Schulnetz-Base-Url: $schulnetzBase\n"
 
         ctx.scope.launch {
-            val (status, body) = withContext(Dispatchers.IO) { Net.httpGet(url, bearer = token) }
+            val (status, body) = withContext(Dispatchers.IO) {
+                Net.httpGet(url, bearer = token, headers = mapOf("X-Schulnetz-Base-Url" to schulnetzBase))
+            }
             val sb = StringBuilder()
             sb.append("HTTP ").append(status).append("\n\n")
             sb.append(prettyJson(body))

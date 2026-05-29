@@ -39,6 +39,8 @@ class ScrapeWebPageHandler(IQueryHandler[ScrapeWebPageQuery, WebScrapeResponseDt
         base_url = query.base_url.rstrip("/")
         cookies = {"PHPSESSID": body.session_id}
 
+        extra = body.additional_cookies
+
         if body.page == "schedule":
             xml = await fetch_scheduler_data(base_url, cookies, body.id, body.transid, user_agent=body.user_agent)
             if xml is None:
@@ -57,7 +59,15 @@ class ScrapeWebPageHandler(IQueryHandler[ScrapeWebPageQuery, WebScrapeResponseDt
             )
 
         pageid, parser = SCRAPERS[body.page]
-        html = await scrape_page(base_url, cookies, pageid, body.id, body.transid, user_agent=body.user_agent)
+        html, refreshed_id, refreshed_transid = await scrape_page(
+            base_url,
+            cookies,
+            pageid,
+            body.id,
+            body.transid,
+            user_agent=body.user_agent,
+            additional_cookies=extra,
+        )
         if html is None:
             return WebScrapeResponseDto(
                 success=False,
@@ -65,7 +75,17 @@ class ScrapeWebPageHandler(IQueryHandler[ScrapeWebPageQuery, WebScrapeResponseDt
             )
 
         try:
-            return WebScrapeResponseDto(success=True, data=parser(html))
+            return WebScrapeResponseDto(
+                success=True,
+                data=parser(html),
+                refreshed_id=refreshed_id,
+                refreshed_transid=refreshed_transid,
+            )
         except Exception as e:
             logger.error(f"Scraper error for {body.page}: {e}")
-            return WebScrapeResponseDto(success=False, message=f"Parsing error: {str(e)}")
+            return WebScrapeResponseDto(
+                success=False,
+                message=f"Parsing error: {str(e)}",
+                refreshed_id=refreshed_id,
+                refreshed_transid=refreshed_transid,
+            )

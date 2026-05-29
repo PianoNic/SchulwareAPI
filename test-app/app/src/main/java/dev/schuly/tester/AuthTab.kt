@@ -63,8 +63,12 @@ class AuthTab : TabSection {
         output.text = "Fetching auth URL…\n"
         ctx.scope.launch {
             val apiBase = ctx.getApiBase()
+            val schulnetzBase = ctx.getSchulnetzBase()
             val (status, body) = withContext(Dispatchers.IO) {
-                Net.httpGet("$apiBase/api/authenticate/oauth/mobile/url")
+                Net.httpGet(
+                    "$apiBase/api/authenticate/oauth/mobile/url",
+                    headers = mapOf("X-Schulnetz-Base-Url" to schulnetzBase),
+                )
             }
             if (status != 200) {
                 output.text = "Failed to get auth URL (HTTP $status):\n$body"
@@ -186,6 +190,7 @@ class AuthTab : TabSection {
         output.append("\nGot authorization code (${code.take(8)}…). Exchanging for tokens…\n")
         val apiBase = ctx.getApiBase()
 
+        val schulnetzBase = ctx.getSchulnetzBase()
         ctx.scope.launch {
             val payload = JSONObject().apply {
                 put("code", code)
@@ -193,7 +198,11 @@ class AuthTab : TabSection {
                 if (state != null) put("state", state)
             }
             val (status, body) = withContext(Dispatchers.IO) {
-                Net.httpPost("$apiBase/api/authenticate/oauth/mobile/callback", payload.toString())
+                Net.httpPost(
+                    "$apiBase/api/authenticate/oauth/mobile/callback",
+                    payload.toString(),
+                    headers = mapOf("X-Schulnetz-Base-Url" to schulnetzBase),
+                )
             }
             val sb = StringBuilder()
             sb.append("HTTP ").append(status).append("\n")
