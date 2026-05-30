@@ -1,16 +1,15 @@
-"""Agenda page scraper.
+"""Agenda (pageid 21200) scraper → typed AgendaPageDto.
 
-The agenda page is JS-driven (scheduler widget); its actual events come from
-`scheduler_processor.php` parsed by `schedule_scraper.parse_scheduler_xml`.
-This scraper still runs the universal extractor so the static surface
-(headings, links, any tables Schulnetz may render statically) is captured —
-but the meaningful per-event data lives in the `schedule` page.
+The agenda page is JS-driven (scheduler widget); the real per-event data comes
+from `scheduler_processor.php` and is parsed by `schedule_scraper.parse_scheduler_xml`
+(the `schedule` page). This scraper extracts any events Schulnetz renders into
+the static HTML; in practice the page ships empty and clients should use the
+`schedule` page for the events.
 """
 
-from typing import Any
-
-from src.application.services.schulnetz_web_scrapers._universal import scrape_schulnetz_page
+from src.application.dtos.web.scrape_dtos import AgendaPageDto
 
 
-def scrape_agenda(html: str) -> dict[str, Any]:
-    return scrape_schulnetz_page(html)
+def scrape_agenda(html: str) -> AgendaPageDto:
+    # The static agenda HTML carries no event rows (the widget loads them via XML).
+    return AgendaPageDto(events=[])
