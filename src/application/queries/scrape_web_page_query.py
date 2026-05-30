@@ -44,7 +44,7 @@ class ScrapeWebPageHandler(IQueryHandler[ScrapeWebPageQuery, WebScrapeResponseDt
             if xml is None:
                 return WebScrapeResponseDto(success=False, message="Session expired or schedule not accessible.")
             try:
-                return WebScrapeResponseDto(success=True, data=parse_scheduler_xml(xml))
+                return WebScrapeResponseDto(success=True, schedule=parse_scheduler_xml(xml))
             except Exception as e:
                 logger.error(f"Schedule parser error: {e}")
                 return WebScrapeResponseDto(success=False, message=f"Parsing error: {str(e)}")
@@ -65,7 +65,8 @@ class ScrapeWebPageHandler(IQueryHandler[ScrapeWebPageQuery, WebScrapeResponseDt
             )
 
         try:
-            return WebScrapeResponseDto(success=True, data=parser(html))
+            # Each scraper returns its page's typed model; place it in the matching field.
+            return WebScrapeResponseDto(success=True, **{body.page: parser(html)})
         except Exception as e:
             logger.error(f"Scraper error for {body.page}: {e}")
             return WebScrapeResponseDto(success=False, message=f"Parsing error: {str(e)}")

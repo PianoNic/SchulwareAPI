@@ -9,7 +9,6 @@ from src.api.controllers import (
     app_controller,
     auth_controller,
     mobile_proxy_controller,
-    web_api_controller,
     web_session_controller,
 )
 from src.api.middleware.sentry_middleware import SentryMiddleware, SentryAsyncContextMiddleware
@@ -86,7 +85,6 @@ app.add_exception_handler(RateLimitExceeded, shared_rate_limit_exceeded_handler)
 app.include_router(app_controller.router)
 app.include_router(auth_controller.router)
 app.include_router(mobile_proxy_controller.router)
-app.include_router(web_api_controller.router)
 app.include_router(web_session_controller.router)
 
 def _flatten_any_of_nullable(obj):

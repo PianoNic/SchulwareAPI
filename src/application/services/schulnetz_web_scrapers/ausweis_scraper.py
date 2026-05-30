@@ -1,13 +1,12 @@
-"""Student ID card (Ausweis) page scraper.
+"""Student ID card (Ausweis, pageid 50505) scraper → WebStudentIdCardDto.
 
-The student ID page renders the card with absolutely-positioned base64
-images and inline CSS — losing that layout to a structured table dump would
-break rendering in any client that just wants to display the card. So this
-scraper returns the raw HTML body and lets the client decide how to render.
+The card renders via absolutely-positioned base64 images and inline CSS; a
+structured table dump would lose the layout, so we return the raw body and let
+the client render it.
 """
 
-from typing import Any
+from src.application.dtos.web.scrape_dtos import WebStudentIdCardDto
 
 
-def scrape_ausweis(html: str) -> dict[str, Any]:
-    return {"html": html}
+def scrape_ausweis(html: str) -> WebStudentIdCardDto:
+    return WebStudentIdCardDto(html=html)

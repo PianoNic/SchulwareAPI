@@ -215,3 +215,6 @@ __marimo__/
 # Debug videos and recordings
 debug_video/
 *.webm
+
+# Real-HTML scraper fixtures contain personal student data — never commit
+tests/fixtures/
