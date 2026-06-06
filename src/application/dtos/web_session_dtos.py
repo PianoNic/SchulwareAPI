@@ -36,6 +36,12 @@ class WebScrapeRequestDto(BaseModel):
     transid: str = Field(..., description="Transaction id parameter from URL")
     user_agent: str | None = Field(None, description="The WebView UA that created the session (Schulnetz binds PHPSESSID to UA)")
 
+class WebDownloadRequestDto(BaseModel):
+    """Request DTO for downloading a filestore document's raw bytes."""
+    session_id: str = Field(..., description="PHPSESSID cookie value")
+    download_url: str = Field(..., description="Relative export link from the documents scrape (index.php?pageid=10051&...)")
+    user_agent: str | None = Field(None, description="The WebView UA that created the session (Schulnetz binds PHPSESSID to UA)")
+
 class WebScrapeResponseDto(BaseModel):
     """Typed response for a scraped Schulnetz page.
 
