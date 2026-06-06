@@ -156,6 +156,62 @@ async def scrape_page(schulnetz_base_url: str, cookies: dict[str, str], pageid: 
             logger.error(f"Failed to scrape pageid={pageid}: {e}")
             return None
 
+def _filename_from_disposition(disposition: str | None, fallback: str) -> str:
+    """Pull the filename out of a Content-Disposition header, else use fallback."""
+    if not disposition:
+        return fallback
+    m = re.search(r'filename\*?=(?:UTF-8\'\')?"?([^";]+)"?', disposition)
+    return m.group(1).strip() if m else fallback
+
+
+async def download_file(
+    schulnetz_base_url: str,
+    cookies: dict[str, str],
+    download_url: str,
+    user_agent: str | None = None,
+) -> tuple[bytes, str, str] | None:
+    """Fetch a filestore document's raw bytes using the stored web session.
+
+    Args:
+        schulnetz_base_url: e.g. https://schulnetz.bbbaden.ch
+        cookies: Session cookies (must include PHPSESSID)
+        download_url: The relative export link from the documents scrape, e.g.
+            "index.php?pageid=10051&tblName=tblFilestore&listindex=1&id=..&transid=.."
+        user_agent: UA the PHPSESSID was created with (Schulnetz binds to it).
+
+    Returns:
+        (content, content_type, filename) or None if the session expired / failed.
+    """
+    url = f"{schulnetz_base_url}/{download_url.lstrip('/')}"
+    headers = {
+        **WEB_HEADERS,
+        "Referer": f"{schulnetz_base_url}/",
+        "Sec-Fetch-Site": "same-origin",
+    }
+    if user_agent:
+        headers["User-Agent"] = user_agent
+
+    async with httpx.AsyncClient(headers=headers, cookies=cookies, follow_redirects=True, timeout=60.0) as client:
+        try:
+            response = await client.get(url)
+            if response.status_code != 200 or "login.microsoftonline.com" in str(response.url):
+                logger.warning(f"Download failed (status {response.status_code}) for {url}")
+                return None
+
+            content_type = response.headers.get("content-type", "application/octet-stream")
+            # An HTML body means we were bounced to a login/error page, not a file.
+            if content_type.startswith("text/html"):
+                logger.warning("Download returned HTML — session likely expired")
+                return None
+
+            filename = _filename_from_disposition(
+                response.headers.get("content-disposition"), "document")
+            return response.content, content_type, filename
+        except Exception as e:
+            logger.error(f"Failed to download file: {e}")
+            return None
+
+
 async def validate_session(schulnetz_base_url: str, cookies: dict[str, str], session_id: str, transid: str, user_agent: str | None = None) -> bool:
     """Check if a PHP session is still valid."""
     html = await scrape_page(schulnetz_base_url, cookies, "21111", session_id, transid, user_agent=user_agent)
