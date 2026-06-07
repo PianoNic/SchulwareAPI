@@ -279,6 +279,55 @@ async def fetch_scheduler_data(schulnetz_base_url: str, cookies: dict[str, str],
             logger.error(f"Failed to fetch scheduler data: {e}")
             return None
 
+async def save_semid(
+    schulnetz_base_url: str,
+    cookies: dict[str, str],
+    session_id: str,
+    transid: str,
+    sem_id: str,
+    user_agent: str | None = None,
+) -> bool:
+    """Set the session-active semester on the Noten page via its xajax call.
+
+    The grades dropdown doesn't pass the semester as a URL param — its onchange
+    fires ``xajax_save_semid(value, returnUrl)``, which POSTs to ``xajax_js.php``
+    to store the chosen semester server-side in the session. A following GET of
+    pageid 21311 then returns that semester's grades. The transid must be the
+    *fresh* one the grades page minted on its last load (it rotates per request),
+    so callers lift it from the page HTML before calling this.
+    """
+    import time
+
+    url = f"{schulnetz_base_url}/xajax_js.php"
+    params = {"pageid": "21311", "id": session_id, "transid": transid}
+    return_url = f"index.php?pageid=21311&id={session_id}&transid={transid}&listindex_s="
+    # xajaxargs[] is repeated once per positional argument (sem id, then return url).
+    data = [
+        ("xajax", "save_semid"),
+        ("xajaxr", str(int(time.time() * 1000))),
+        ("xajaxargs[]", sem_id),
+        ("xajaxargs[]", return_url),
+    ]
+
+    headers = {
+        **WEB_HEADERS,
+        "Referer": f"{schulnetz_base_url}/",
+        "Sec-Fetch-Site": "same-origin",
+        "X-Requested-With": "XMLHttpRequest",
+        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+    }
+    if user_agent:
+        headers["User-Agent"] = user_agent
+
+    async with httpx.AsyncClient(headers=headers, cookies=cookies, follow_redirects=True, timeout=30.0) as client:
+        try:
+            response = await client.post(url, params=params, data=data)
+            return response.status_code == 200
+        except Exception as e:
+            logger.error(f"Failed to save semester {sem_id}: {e}")
+            return False
+
+
 # Page ID constants for known Schulnetz pages
 PAGE_IDS = {
     "home": "1",
