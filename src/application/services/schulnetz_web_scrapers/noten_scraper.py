@@ -107,9 +107,19 @@ def scrape_noten(html: str) -> GradesPageDto:
         cells = _own_cells(row, outer)
         if not cells:
             continue
-        name = _clean(cells[0].get_text())
-        if not _COURSE_RE.match(name):
+        cell0 = cells[0]
+        raw = _clean(cell0.get_text())
+        if not _COURSE_RE.match(raw):
             continue
+        # The course cell is "<b>{token}</b><br>{subject name}" — get_text()
+        # smushes them together, so split the bold token off and keep the
+        # human-readable subject name (fall back to the token if there's no name).
+        bold = cell0.find("b")
+        if bold is not None:
+            token = _clean(bold.get_text())
+            name = _clean(cell0.get_text(" ").replace(token, "", 1)) or token
+        else:
+            name = raw
         average = _num(_clean(cells[1].get_text())) if len(cells) > 1 else None
         row_text = _clean(row.get_text())
         confirmed = "bestätigt" in row_text.lower() and "bestätigen" not in row_text.lower()

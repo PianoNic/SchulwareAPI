@@ -220,25 +220,40 @@ async def validate_session(schulnetz_base_url: str, cookies: dict[str, str], ses
     return "pageid" in html
 
 async def fetch_scheduler_data(schulnetz_base_url: str, cookies: dict[str, str], session_id: str, transid: str, date: str | None = None, user_agent: str | None = None) -> str | None:
-    """Fetch timetable/agenda data from the scheduler AJAX endpoint."""
+    """Fetch timetable/agenda data from the scheduler AJAX endpoint.
+
+    The dhtmlxScheduler on pageid 22202 is driven by ``scheduler_processor.php``,
+    but that endpoint needs the *fresh* transid the agenda page mints on load —
+    replaying the stored session transid returns an empty ``<data/>``. So we GET
+    the agenda page first, lift its transid, and pull a wide date window (the
+    whole rest of the term) rather than a single week.
+    """
     from datetime import datetime, timedelta
 
     if date is None:
         date = datetime.now().strftime("%Y-%m-%d")
 
     dt = datetime.strptime(date, "%Y-%m-%d")
-    week_start = (dt - timedelta(days=dt.weekday())).strftime("%Y-%m-%d")
-    week_end = (dt + timedelta(days=6 - dt.weekday())).strftime("%Y-%m-%d")
+    min_date = (dt - timedelta(days=35)).strftime("%Y-%m-%d")
+    max_date = (dt + timedelta(days=120)).strftime("%Y-%m-%d")
+
+    # Mint a fresh transid by loading the agenda page (pageid 22202).
+    sched_transid = transid
+    page_html = await scrape_page(schulnetz_base_url, cookies, "22202", session_id, transid, user_agent=user_agent)
+    if page_html:
+        m = re.search(r"transid=([a-f0-9]{4,})", page_html)
+        if m:
+            sched_transid = m.group(1)
 
     url = f"{schulnetz_base_url}/scheduler_processor.php"
     params = {
         "view": "week",
         "curr_date": date,
-        "min_date": week_start,
-        "max_date": week_end,
+        "min_date": min_date,
+        "max_date": max_date,
         "ansicht": "schueleransicht",
         "id": session_id,
-        "transid": transid,
+        "transid": sched_transid,
         "pageid": "22202",
         "timeshift": "-120",
     }
