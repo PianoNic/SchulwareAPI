@@ -297,17 +297,20 @@ async def save_semid(
     so callers lift it from the page HTML before calling this.
     """
     import time
+    from urllib.parse import urlencode
 
     url = f"{schulnetz_base_url}/xajax_js.php"
     params = {"pageid": "21311", "id": session_id, "transid": transid}
     return_url = f"index.php?pageid=21311&id={session_id}&transid={transid}&listindex_s="
     # xajaxargs[] is repeated once per positional argument (sem id, then return url).
-    data = [
+    # Encode the body ourselves and send it as raw content: httpx 0.28 wraps
+    # `data=` form payloads in a SyncByteStream that AsyncClient refuses to send.
+    body = urlencode([
         ("xajax", "save_semid"),
         ("xajaxr", str(int(time.time() * 1000))),
         ("xajaxargs[]", sem_id),
         ("xajaxargs[]", return_url),
-    ]
+    ])
 
     headers = {
         **WEB_HEADERS,
@@ -321,7 +324,7 @@ async def save_semid(
 
     async with httpx.AsyncClient(headers=headers, cookies=cookies, follow_redirects=True, timeout=30.0) as client:
         try:
-            response = await client.post(url, params=params, data=data)
+            response = await client.post(url, params=params, content=body)
             return response.status_code == 200
         except Exception as e:
             logger.error(f"Failed to save semester {sem_id}: {e}")

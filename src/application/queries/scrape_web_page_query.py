@@ -48,9 +48,15 @@ async def _scrape_all_semester_grades(
     original = next((sid for sid, _, sel in options if sel), options[0][0])
     fresh = (m.group(1) if (m := _TRANSID_RE.search(html)) else None) or transid
 
+    # The dropdown is newest-first and includes *future* semesters above the
+    # current one (e.g. "2. 35/36"); those are always empty. Start at the
+    # session-selected semester (the current real one) and walk backwards so the
+    # "2 empty in a row" stop condition doesn't trip on future placeholders.
+    selected_idx = next((i for i, (_, _, sel) in enumerate(options) if sel), 0)
+
     merged: list = []
     empty = 0
-    for sem_id, label, _ in options:  # newest-first
+    for sem_id, label, _ in options[selected_idx:]:  # current, then older
         if not await save_semid(base_url, cookies, session_id, fresh, sem_id, user_agent=user_agent):
             break
         page_html = await scrape_page(base_url, cookies, "21311", session_id, transid, user_agent=user_agent)
