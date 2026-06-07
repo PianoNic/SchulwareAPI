@@ -29,6 +29,27 @@ def _own_cells(row: Tag, table: Tag) -> list[Tag]:
     return [c for c in row.find_all(["th", "td"]) if c.find_parent("table") is table]
 
 
+def parse_semester_options(html: str) -> list[tuple[str, str, bool]]:
+    """Read the ``<select name="sem">`` semester switcher off the Noten page.
+
+    The grades page only ever shows one semester (the session-active one); the
+    dropdown lists every semester the school has ever had, newest-first. Returns
+    ``(sem_id, label, is_selected)`` tuples in document order, e.g.
+    ``("41", "2. 25/26", True)``. Empty list when the page has no switcher.
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    sel = soup.find("select", attrs={"name": "sem"}) or soup.find("select", attrs={"id": "sem"})
+    if sel is None:
+        return []
+    out: list[tuple[str, str, bool]] = []
+    for opt in sel.find_all("option"):
+        value = opt.get("value")
+        if not value:
+            continue
+        out.append((value, _clean(opt.get_text()), opt.has_attr("selected")))
+    return out
+
+
 def _parse_exam_row(cells: list[str]) -> ExamGradeDto | None:
     # Exam rows look like ["", date, topic, mark(+points), weight, class_avg].
     # Drop a leading empty group cell so positions are stable.
