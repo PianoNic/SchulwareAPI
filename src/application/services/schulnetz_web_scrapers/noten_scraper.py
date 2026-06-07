@@ -12,8 +12,11 @@ from bs4 import BeautifulSoup, Tag
 
 from src.application.dtos.web.scrape_dtos import CourseGradesDto, ExamGradeDto, GradesPageDto
 
-# A course cell starts with a course token like "GP-BM23d-ArAr" or "106-IN23a-ScPe".
-_COURSE_RE = re.compile(r"^[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-zÄÖÜäöü]+")
+# A course cell starts with a course token like "GP-BM23d-ArAr", "106-IN23a-ScPe",
+# "NW (Ph)-BM23d-BuFe" (subject code with spaces/parens) or "IDPA-BM23d-288"
+# (numeric teacher segment). Allow spaces/parens in the subject and digits in the
+# teacher segment so those courses (e.g. Physics) aren't silently dropped.
+_COURSE_RE = re.compile(r"^[A-Za-zÄÖÜäöü0-9 ()]+-[A-Za-z0-9]+-[A-Za-zÄÖÜäöü0-9]+")
 
 
 def _clean(text: str) -> str:
@@ -140,12 +143,14 @@ def scrape_noten(html: str) -> GradesPageDto:
             token = _clean(bold.get_text())
             name = _clean(cell0.get_text(" ").replace(token, "", 1)) or token
         else:
+            token = None
             name = raw
         average = _num(_clean(cells[1].get_text())) if len(cells) > 1 else None
         row_text = _clean(row.get_text())
         confirmed = "bestätigt" in row_text.lower() and "bestätigen" not in row_text.lower()
         detail = detail_by_course_id.get(id(row))
         exams = _exams_from_detail(detail) if detail is not None else []
-        courses.append(CourseGradesDto(course=name, average=average, confirmed=confirmed, exams=exams))
+        courses.append(CourseGradesDto(
+            course=name, course_token=token, average=average, confirmed=confirmed, exams=exams))
 
     return GradesPageDto(student=student, courses=courses)

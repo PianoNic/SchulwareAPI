@@ -21,7 +21,8 @@ class ExamGradeDto(BaseModel):
 
 
 class CourseGradesDto(BaseModel):
-    course: str | None = None        # "GP-BM23d-ArAr Geschichte und Politik"
+    course: str | None = None        # human-readable name, e.g. "Geschichte und Politik"
+    course_token: str | None = None  # course code, e.g. "GP-BM23d-ArAr" (matches the timetable's kurskuerzel)
     average: float | None = None     # 5.500 (Notendurchschnitt)
     confirmed: bool | None = None    # Bestätigt
     exams: list[ExamGradeDto] = []
