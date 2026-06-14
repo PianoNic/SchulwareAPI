@@ -136,6 +136,9 @@ async def scrape_page(schulnetz_base_url: str, cookies: dict[str, str], pageid: 
         "Referer": f"{schulnetz_base_url}/",
         "Sec-Fetch-Site": "same-origin",
     }
+    # Schulnetz binds the PHPSESSID to the UA that created it. The refresh runner
+    # mints the session in a browser using the account UA, so the scrape must
+    # replay that same UA — otherwise the session is rejected.
     if user_agent:
         headers["User-Agent"] = user_agent
 
@@ -188,6 +191,9 @@ async def download_file(
         "Referer": f"{schulnetz_base_url}/",
         "Sec-Fetch-Site": "same-origin",
     }
+    # Schulnetz binds the PHPSESSID to the UA that created it. The refresh runner
+    # mints the session in a browser using the account UA, so the scrape must
+    # replay that same UA — otherwise the session is rejected.
     if user_agent:
         headers["User-Agent"] = user_agent
 
@@ -265,6 +271,9 @@ async def fetch_scheduler_data(schulnetz_base_url: str, cookies: dict[str, str],
         "Accept": "text/html, */*; q=0.01",
         "X-Requested-With": "XMLHttpRequest",
     }
+    # Schulnetz binds the PHPSESSID to the UA that created it. The refresh runner
+    # mints the session in a browser using the account UA, so the scrape must
+    # replay that same UA — otherwise the session is rejected.
     if user_agent:
         headers["User-Agent"] = user_agent
 
@@ -319,6 +328,9 @@ async def save_semid(
         "X-Requested-With": "XMLHttpRequest",
         "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
     }
+    # Schulnetz binds the PHPSESSID to the UA that created it. The refresh runner
+    # mints the session in a browser using the account UA, so the scrape must
+    # replay that same UA — otherwise the session is rejected.
     if user_agent:
         headers["User-Agent"] = user_agent
 
