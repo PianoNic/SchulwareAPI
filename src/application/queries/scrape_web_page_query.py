@@ -48,15 +48,17 @@ async def _scrape_all_semester_grades(
     original = next((sid for sid, _, sel in options if sel), options[0][0])
     fresh = (m.group(1) if (m := _TRANSID_RE.search(html)) else None) or transid
 
-    # The dropdown is newest-first and includes *future* semesters above the
-    # current one (e.g. "2. 35/36"); those are always empty. Start at the
-    # session-selected semester (the current real one) and walk backwards so the
-    # "2 empty in a row" stop condition doesn't trip on future placeholders.
-    selected_idx = next((i for i, (_, _, sel) in enumerate(options) if sel), 0)
-
+    # The dropdown is newest-first: a few (always-empty) *future* placeholder
+    # terms, then the current term, then history. We must NOT start at the
+    # session-selected semester — a session captured in an earlier term stays
+    # pinned there, so the current term (with the student's newest grades) can sit
+    # *above* the selected one and would be missed. Instead walk the whole list:
+    # skip leading empty placeholders without counting them, and once we've seen
+    # real data, stop after two empty terms in a row (the end of history).
     merged: list = []
     empty = 0
-    for sem_id, label, _ in options[selected_idx:]:  # current, then older
+    seen_data = False
+    for sem_id, label, _ in options:
         if not await save_semid(base_url, cookies, session_id, fresh, sem_id, user_agent=user_agent):
             break
         page_html = await scrape_page(base_url, cookies, "21311", session_id, transid, user_agent=user_agent)
@@ -68,10 +70,12 @@ async def _scrape_all_semester_grades(
         if page.courses:
             merged.extend(page.courses)
             empty = 0
-        else:
+            seen_data = True
+        elif seen_data:
             empty += 1
             if empty >= _MAX_EMPTY_SEMESTERS:
                 break
+        # else: leading future placeholder above the current term — keep looking.
 
     # Put the session back on the semester it started on.
     await save_semid(base_url, cookies, session_id, fresh, original, user_agent=user_agent)
