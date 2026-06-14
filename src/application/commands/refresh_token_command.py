@@ -26,6 +26,7 @@ from dataclasses import dataclass
 from mediatorx import ICommand, ICommandHandler
 
 from src.application.dtos.refresh_dtos import RefreshTokenResponseDto
+from src.application.services.web_session_service import capture_web_session
 from src.infrastructure.logging_config import get_logger
 
 SCHULNETZ_CLIENT_ID = os.getenv("SCHULNETZ_CLIENT_ID", "ppyybShnMerHdtBQ")
@@ -71,32 +72,54 @@ class RefreshTokenHandler(ICommandHandler[RefreshTokenCommand, RefreshTokenRespo
                     ctx_kwargs["user_agent"] = command.user_agent
                 context = await browser.new_context(**ctx_kwargs)
 
+                host = urlparse(command.schulnetz_base_url).netloc
+                captured: dict[str, str | None] = {"code": None, "state": None}
+
+                async def _harvest_code(route):
+                    # Grab the OAuth code off the redirect to Schulnetz, then ABORT it.
+                    # Letting the browser load /?code= makes Schulnetz consume the
+                    # single-use code right there, leaving the later httpx exchange
+                    # with a spent code and a dead PHPSESSID. (Same trick as the
+                    # mobile-token flow in _exchange_mobile_tokens.)
+                    req_url = route.request.url
+                    if "code=" in req_url:
+                        qs = parse_qs(urlparse(req_url).query)
+                        captured["code"] = qs.get("code", [None])[0]
+                        captured["state"] = qs.get("state", [None])[0]
+                        await route.abort()
+                    else:
+                        await route.continue_()
+
                 page = await context.new_page()
+                await page.route(lambda u: host in u, _harvest_code)
                 code: str | None = None
                 state: str | None = None
 
                 try:
-                    await page.goto(command.schulnetz_base_url, wait_until="load", timeout=60_000)
-                    current_url = page.url
+                    try:
+                        await page.goto(command.schulnetz_base_url, wait_until="load", timeout=60_000)
+                    except Exception:
+                        pass  # the post-SSO ?code= redirect is intercepted + aborted
 
-                    # SSO session expired → need credentials to re-auth via Microsoft.
-                    if "login.microsoftonline.com" in current_url:
+                    # Expired MS SSO → need credentials to re-auth via Microsoft.
+                    if not captured["code"] and "login.microsoftonline.com" in page.url:
                         if not command.email or not command.password:
                             return RefreshTokenResponseDto(
                                 success=False,
                                 message="Microsoft SSO session expired. Re-authenticate via /api/authenticate/oauth/mobile/url.",
                             )
-                        await _perform_microsoft_sso(page, command.email, command.password)
-                        await page.wait_for_url(f"{command.schulnetz_base_url}*", timeout=30_000)
+                        try:
+                            await _perform_microsoft_sso(page, command.email, command.password)
+                        except Exception:
+                            pass  # final ?code= redirect is intercepted + aborted
 
-                    current_url = page.url
-                    code, state = _extract_code_state(current_url)
+                    # Let the intercepted redirect settle.
+                    for _ in range(20):
+                        if captured["code"]:
+                            break
+                        await page.wait_for_timeout(500)
 
-                    # Some Schulnetz instances need a second hit before the code shows up.
-                    if not code:
-                        await page.goto(command.schulnetz_base_url, wait_until="load", timeout=30_000)
-                        code, state = _extract_code_state(page.url)
-
+                    code, state = captured["code"], captured["state"]
                     if not code:
                         return RefreshTokenResponseDto(success=False, message="Failed to obtain authorization code")
 
@@ -246,22 +269,13 @@ async def _exchange_mobile_tokens(context, schulnetz_base_url: str) -> tuple[str
 async def _capture_web_session(
     schulnetz_base_url: str, code: str, state: str | None
 ) -> tuple[str | None, str | None, str | None]:
-    async with httpx.AsyncClient(follow_redirects=True, timeout=30.0) as client:
-        login_url = f"{schulnetz_base_url}/loginto.php"
-        params = {"code": code, "state": state or "", "mode": "4", "lang": ""}
-        res = await client.get(login_url, params=params)
-
-        cookies: dict[str, str] = {}
-        for resp in res.history + [res]:
-            cookies.update(dict(resp.cookies))
-
-        session_id = cookies.get("PHPSESSID")
-
-        html = res.text
-        id_match = re.search(r"[?&]id=([a-f0-9]{10,})", html)
-        transid_match = re.search(r"[?&]transid=([a-f0-9]+)", html)
-        web_user_id = id_match.group(1) if id_match else None
-        web_trans_id = transid_match.group(1) if transid_match else None
-
-        return session_id, web_user_id, web_trans_id
+    # Delegate to the canonical capture: it exchanges the code at the school root
+    # `/` (NOT /loginto.php, which returns a "session expired" page) and uses
+    # WEB_HEADERS — so the refresh path mints a session identically to the initial
+    # OAuth capture, and the scraper's UA matches.
+    cookies, info = await capture_web_session(schulnetz_base_url, code, state or "")
+    if not cookies:
+        return None, None, None
+    info = info or {}
+    return cookies.get("PHPSESSID"), info.get("id"), info.get("transid")
 

@@ -37,13 +37,18 @@ async def _scrape_all_semester_grades(
     """
     html = await scrape_page(base_url, cookies, "21311", session_id, transid, user_agent=user_agent)
     if html is None:
+        logger.warning("grades: initial Noten page load returned None (web session expired / redirect)")
         return None
 
     options = parse_semester_options(html)
     student = scrape_noten(html).student
+    logger.info("grades: %d semester options: %s", len(options),
+                [f"{lbl}{'*' if sel else ''}" for _, lbl, sel in options])
     if not options:
         # No switcher — just the single visible semester.
-        return scrape_noten(html)
+        page0 = scrape_noten(html)
+        logger.info("grades: no semester switcher; %d courses on the visible page", len(page0.courses))
+        return page0
 
     original = next((sid for sid, _, sel in options if sel), options[0][0])
     fresh = (m.group(1) if (m := _TRANSID_RE.search(html)) else None) or transid
@@ -67,6 +72,7 @@ async def _scrape_all_semester_grades(
         if m := _TRANSID_RE.search(page_html):
             fresh = m.group(1)
         page = scrape_noten(page_html)
+        logger.info("grades: sem %s (%s) -> %d courses", label, sem_id, len(page.courses))
         if page.courses:
             merged.extend(page.courses)
             empty = 0
@@ -79,6 +85,7 @@ async def _scrape_all_semester_grades(
 
     # Put the session back on the semester it started on.
     await save_semid(base_url, cookies, session_id, fresh, original, user_agent=user_agent)
+    logger.info("grades: merged %d courses across %d semesters", len(merged), len(options))
     return GradesPageDto(student=student, courses=merged)
 
 SCRAPERS = {
