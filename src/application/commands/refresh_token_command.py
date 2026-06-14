@@ -72,67 +72,54 @@ class RefreshTokenHandler(ICommandHandler[RefreshTokenCommand, RefreshTokenRespo
                     ctx_kwargs["user_agent"] = command.user_agent
                 context = await browser.new_context(**ctx_kwargs)
 
-                host = urlparse(command.schulnetz_base_url).netloc
-                captured: dict[str, str | None] = {"code": None, "state": None}
-
-                async def _harvest_code(route):
-                    # Grab the OAuth code off the redirect to Schulnetz, then ABORT it.
-                    # Letting the browser load /?code= makes Schulnetz consume the
-                    # single-use code right there, leaving the later httpx exchange
-                    # with a spent code and a dead PHPSESSID. (Same trick as the
-                    # mobile-token flow in _exchange_mobile_tokens.)
-                    req_url = route.request.url
-                    if "code=" in req_url:
-                        qs = parse_qs(urlparse(req_url).query)
-                        captured["code"] = qs.get("code", [None])[0]
-                        captured["state"] = qs.get("state", [None])[0]
-                        await route.abort()
-                    else:
-                        await route.continue_()
-
                 page = await context.new_page()
-                await page.route(lambda u: host in u, _harvest_code)
-                code: str | None = None
-                state: str | None = None
 
                 try:
                     try:
                         await page.goto(command.schulnetz_base_url, wait_until="load", timeout=60_000)
                     except Exception:
-                        pass  # the post-SSO ?code= redirect is intercepted + aborted
+                        pass
 
                     # Expired MS SSO → need credentials to re-auth via Microsoft.
-                    if not captured["code"] and "login.microsoftonline.com" in page.url:
+                    if "login.microsoftonline.com" in page.url:
                         if not command.email or not command.password:
                             return RefreshTokenResponseDto(
                                 success=False,
                                 message="Microsoft SSO session expired. Re-authenticate via /api/authenticate/oauth/mobile/url.",
                             )
+                        await _perform_microsoft_sso(page, command.email, command.password)
                         try:
-                            await _perform_microsoft_sso(page, command.email, command.password)
+                            await page.wait_for_url(f"{command.schulnetz_base_url}*", timeout=30_000)
                         except Exception:
-                            pass  # final ?code= redirect is intercepted + aborted
+                            pass
 
-                    # Let the intercepted redirect settle.
-                    for _ in range(20):
-                        if captured["code"]:
-                            break
-                        await page.wait_for_timeout(500)
-
-                    code, state = captured["code"], captured["state"]
-                    if not code:
-                        return RefreshTokenResponseDto(success=False, message="Failed to obtain authorization code")
+                    # The browser completed the OAuth round-trip, so Schulnetz set a
+                    # valid PHPSESSID on it (bound to this context's UA). Harvest that
+                    # session straight from the browser — re-exchanging the now-spent
+                    # single-use OAuth code over httpx only yields a dead session.
+                    sn_cookies = await context.cookies(command.schulnetz_base_url)
+                    host = urlparse(command.schulnetz_base_url).netloc
+                    phps = [c for c in sn_cookies if c["name"] == "PHPSESSID"]
+                    # Schulnetz regenerates the session on login and sets it as a
+                    # host-only cookie (domain == host, no leading dot). Prefer that
+                    # over the stale, subdomain-wide ".host" cookie left from before.
+                    host_only = [c for c in phps if c.get("domain", "").lstrip(".") == host
+                                 and not c.get("domain", "").startswith(".")]
+                    session_id = (host_only or phps or [{"value": None}])[0]["value"]
+                    html = await page.content()
+                    id_m = re.search(r"[?&]id=([a-f0-9]{10,})", html)
+                    transid_m = re.search(r"[?&]transid=([a-f0-9]+)", html)
+                    web_user_id = id_m.group(1) if id_m else None
+                    web_trans_id = transid_m.group(1) if transid_m else None
+                    logger.info("refresh: harvested web session php=%s id=%s transid=%s", bool(session_id), web_user_id, web_trans_id)
+                    if not session_id:
+                        return RefreshTokenResponseDto(success=False, message="No web session captured after login")
 
                 finally:
                     await page.close()
 
                 # Mobile token exchange via a separate PKCE round-trip.
                 access_token, refresh_token = await _exchange_mobile_tokens(context, command.schulnetz_base_url)
-
-                # Capture web session cookies + landing-page params using the original code.
-                session_id, web_user_id, web_trans_id = await _capture_web_session(
-                    command.schulnetz_base_url, code, state
-                )
 
                 # Snapshot the updated context for the caller to persist.
                 updated_state = await context.storage_state()
