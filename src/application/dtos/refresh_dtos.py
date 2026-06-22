@@ -1,8 +1,9 @@
 """DTOs for the stateless token refresh endpoints.
 
 The caller (e.g. the Schuly Schulware plugin) owns persistence of context_state
-and credentials. SchulwareAPI accepts state in, drives Playwright, returns the
-updated state out — without storing anything itself.
+and credentials. SchulwareAPI accepts state in, replays it headlessly through
+Microsoft Entra (via `ms-entrance`), returns the updated state out — without
+storing anything itself.
 """
 
 from typing import Any
@@ -33,6 +34,7 @@ class RefreshTokenWithCredentialsRequestDto(BaseModel):
     schulnetz_base_url: str = Field(..., description="The Schulnetz instance base URL, e.g. https://schulnetz.example.ch")
     email: str = Field(..., description="Microsoft SSO email.")
     password: str = Field(..., description="Microsoft SSO password.")
+    totp_secret: str | None = Field(default=None, description="Base32 TOTP secret, if the account has authenticator-app MFA. Push/SMS MFA can't be done headlessly.")
     user_agent: str | None = Field(default=None, description="UA string to use for the new session.")
 
 class RefreshTokenResponseDto(BaseModel):

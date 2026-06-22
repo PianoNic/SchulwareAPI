@@ -68,6 +68,7 @@ class AuthController:
             schulnetz_base_url=body.schulnetz_base_url,
             email=body.email,
             password=body.password,
+            totp_secret=body.totp_secret,
             user_agent=body.user_agent,
         ))
 
