@@ -23,7 +23,7 @@ SchulwareAPI is a unified FastAPI application that provides access to Schulnetz 
 
 ### Dependencies
 - Install: `pip install -r requirements.txt`
-- Install Playwright browsers: `playwright install chromium`
+- No browser needed: Microsoft Entra OAuth login is headless via the `ms-entrance` package (`entrance.login`).
 
 ## Architecture
 
@@ -69,7 +69,7 @@ Controllers use `SchulwareAPIRouter` which auto-generates paths:
 ## Key Technologies
 - **FastAPI**: Web framework with auto-generated OpenAPI docs
 - **MediatorX**: CQRS mediator for command/query dispatch
-- **Playwright**: Headless browser for OAuth refresh and web scraping
+- **ms-entrance**: browserless Microsoft Entra OAuth login (`entrance.login`) — replaces Playwright. Web scraping is plain `httpx`.
 - **SlowAPI**: Rate limiting middleware
 - **Uvicorn**: ASGI server for production
 

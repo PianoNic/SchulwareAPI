@@ -2,7 +2,7 @@ fastapi==0.122.0
 uvicorn==0.38.0
 httpx==0.28.1
 python-dotenv==1.2.1
-playwright==1.56.0
+ms-entrance==1.1.0
 python-multipart==0.0.20
 colorlog==6.10.1
 beautifulsoup4==4.14.2

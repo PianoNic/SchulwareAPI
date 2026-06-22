@@ -1,10 +1,9 @@
 FROM python:3.14.0-slim
 
-# Set environment variables for Docker and Playwright
+# Set environment variables for Docker
 ARG DEBIAN_FRONTEND=noninteractive
 ENV LANG=C.UTF-8
 ENV LC_ALL=C.UTF-8
-ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
 # Set working directory
 WORKDIR /app
@@ -15,16 +14,11 @@ COPY requirements.txt .
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install ffmpeg for video compression and Chromium browser with dependencies
-# Installing ffmpeg before Playwright for video processing capabilities
+# Install ffmpeg for video processing capabilities
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
-
-# Install only Chromium browser and its dependencies using the official Playwright method
-# This installs only Chromium and its system dependencies, following Playwright best practices
-RUN playwright install --with-deps chromium
 
 # Copy the application code
 COPY . .
