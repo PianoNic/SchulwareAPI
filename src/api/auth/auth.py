@@ -18,16 +18,15 @@ import httpx
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 
+from src.application.constants import DEFAULT_SCHULNETZ_CLIENT_ID
 from src.infrastructure.logging_config import get_logger
 
 logger = get_logger("authentication")
 
 load_dotenv()
 
-SCHULNETZ_CLIENT_ID = os.getenv("SCHULNETZ_CLIENT_ID")
-
-if not all([SCHULNETZ_CLIENT_ID]):
-    raise EnvironmentError("Missing required environment variables.")
+# Public, instance-invariant default; override via env only for a non-standard deployment.
+SCHULNETZ_CLIENT_ID = os.getenv("SCHULNETZ_CLIENT_ID", DEFAULT_SCHULNETZ_CLIENT_ID)
 
 
 def generate_random_string(length: int) -> str:

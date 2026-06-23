@@ -1,6 +1,7 @@
 
 import httpx
 from src.infrastructure.logging_config import get_logger
+from src.application.constants import DEFAULT_SCHULNETZ_CLIENT_ID
 from src.application.services.env_service import get_env_variable
 
 # Logger for this module
@@ -12,7 +13,7 @@ class ApplicationType:
 
 class TokenService:
     def __init__(self):
-        self.client_id = get_env_variable("SCHULNETZ_CLIENT_ID")
+        self.client_id = get_env_variable("SCHULNETZ_CLIENT_ID", DEFAULT_SCHULNETZ_CLIENT_ID)
 
     async def refresh_mobile_token(self, refresh_token: str) -> tuple[str | None, str | None]:
         """Refresh mobile API token"""
