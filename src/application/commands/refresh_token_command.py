@@ -1,268 +1,115 @@
-"""Stateless token + session refresh via Playwright.
+"""Stateless Schulnetz login via headless `ms-entrance`.
 
-Translated from the standalone refresher service (formerly in
-SchulyPlugins/src/Schuly.Plugin.Schulware/refresher/main.py). Folded in here so
-SchulwareAPI is the single Schulnetz-talking-to surface.
+Input in, output out: the caller passes credentials and/or a `session_cookies`
+jar; we replay it through Microsoft Entra with `ms-entrance` — no browser — and
+return fresh tokens, the web session, and the rotated `session_cookies` to
+persist. SchulwareAPI stores nothing.
 
-State contract: the caller passes `context_state` (Playwright storage_state
-dict) in; we hydrate a browser context from it; on success we return the
-updated state for the caller to persist. SchulwareAPI itself stores nothing.
+The flow is two cookie-sharing logins fed into Schulnetz's pure-HTTP exchanges:
+  1. a "web" authorize round-trip → code → `capture_web_session` → PHPSESSID
+  2. a "mobile" authorize round-trip → code → `exchange_code_for_tokens` → tokens
+`ms_login` seeds the stored cookies for a silent SSO; if they're stale it falls
+back to credentials (when provided), or raises `NeedsCredentials`.
 """
 
-import base64
-import hashlib
-import os
-import re
-import secrets
-import string
-
-from urllib.parse import parse_qs, urlencode, urlparse
-
-import httpx
-from playwright.async_api import async_playwright
-
+import asyncio
 from dataclasses import dataclass
 
+from entrance import LoginFailed, MfaRequired, NeedsCredentials
+from entrance import login as ms_login
 from mediatorx import ICommand, ICommandHandler
 
-from src.application.dtos.refresh_dtos import RefreshTokenResponseDto
+from src.api.auth.auth import exchange_code_for_tokens, generate_oauth_url
+from src.application.dtos.refresh_dtos import LoginResponseDto
 from src.application.services.web_session_service import capture_web_session
 from src.infrastructure.logging_config import get_logger
 
-SCHULNETZ_CLIENT_ID = os.getenv("SCHULNETZ_CLIENT_ID", "ppyybShnMerHdtBQ")
+logger = get_logger("login_command")
 
-logger = get_logger("refresh_token_command")
 
 @dataclass
-class RefreshTokenCommand(ICommand[RefreshTokenResponseDto]):
+class LoginCommand(ICommand[LoginResponseDto]):
     schulnetz_base_url: str
-    context_state: dict | None = None
+    session_cookies: list | None = None
     email: str | None = None
     password: str | None = None
+    totp_secret: str | None = None
+    totp_code: str | None = None
     user_agent: str | None = None
 
 
-class RefreshTokenHandler(ICommandHandler[RefreshTokenCommand, RefreshTokenResponseDto]):
-    """Drive a one-shot browser session to harvest fresh mobile + web tokens.
+class LoginHandler(ICommandHandler[LoginCommand, LoginResponseDto]):
+    """Mint fresh mobile + web tokens by replaying the cookie jar (or credentials)
+    through Microsoft Entra headlessly via ms-entrance, then exchanging the
+    resulting authorization codes at Schulnetz over plain HTTP."""
 
-    Returns the updated browser context state alongside the tokens. Caller
-    persists the state and replays it on the next call.
-    """
+    async def handle(self, command: LoginCommand) -> LoginResponseDto:
+        base = command.schulnetz_base_url.rstrip("/")
+        cookies = command.session_cookies or None
+        if cookies:
+            logger.info("Login: replaying %d stored cookies", len(cookies))
 
-    async def handle(self, command: RefreshTokenCommand) -> RefreshTokenResponseDto:
-        async with async_playwright() as pw:
-            browser = await pw.chromium.launch(headless=True)
-            try:
-                context_state = _normalize_state(command.context_state)
-                if context_state:
-                    cs_cookies = context_state.get("cookies", [])
-                    cs_origins = context_state.get("origins", [])
-                    domains = sorted({c.get("domain", "") for c in cs_cookies})
-                    logger.info(
-                        "Refresh: %d cookies across %s, %d localStorage origins",
-                        len(cs_cookies), domains, len(cs_origins),
-                    )
-
-                ctx_kwargs = {}
-                if context_state:
-                    ctx_kwargs["storage_state"] = context_state
-                if command.user_agent:
-                    # MS binds session cookies to UA — caller MUST send the same UA the
-                    # cookies were captured with, otherwise the SSO replay is rejected.
-                    ctx_kwargs["user_agent"] = command.user_agent
-                context = await browser.new_context(**ctx_kwargs)
-
-                page = await context.new_page()
-
-                try:
-                    try:
-                        await page.goto(command.schulnetz_base_url, wait_until="load", timeout=60_000)
-                    except Exception:
-                        pass
-
-                    # Expired MS SSO → need credentials to re-auth via Microsoft.
-                    if "login.microsoftonline.com" in page.url:
-                        if not command.email or not command.password:
-                            return RefreshTokenResponseDto(
-                                success=False,
-                                message="Microsoft SSO session expired. Re-authenticate via /api/authenticate/oauth/mobile/url.",
-                            )
-                        await _perform_microsoft_sso(page, command.email, command.password)
-                        try:
-                            await page.wait_for_url(f"{command.schulnetz_base_url}*", timeout=30_000)
-                        except Exception:
-                            pass
-
-                    # The browser completed the OAuth round-trip, so Schulnetz set a
-                    # valid PHPSESSID on it (bound to this context's UA). Harvest that
-                    # session straight from the browser — re-exchanging the now-spent
-                    # single-use OAuth code over httpx only yields a dead session.
-                    sn_cookies = await context.cookies(command.schulnetz_base_url)
-                    host = urlparse(command.schulnetz_base_url).netloc
-                    phps = [c for c in sn_cookies if c["name"] == "PHPSESSID"]
-                    # Schulnetz regenerates the session on login and sets it as a
-                    # host-only cookie (domain == host, no leading dot). Prefer that
-                    # over the stale, subdomain-wide ".host" cookie left from before.
-                    host_only = [c for c in phps if c.get("domain", "").lstrip(".") == host
-                                 and not c.get("domain", "").startswith(".")]
-                    session_id = (host_only or phps or [{"value": None}])[0]["value"]
-                    html = await page.content()
-                    id_m = re.search(r"[?&]id=([a-f0-9]{10,})", html)
-                    transid_m = re.search(r"[?&]transid=([a-f0-9]+)", html)
-                    web_user_id = id_m.group(1) if id_m else None
-                    web_trans_id = transid_m.group(1) if transid_m else None
-                    logger.info("refresh: harvested web session php=%s id=%s transid=%s", bool(session_id), web_user_id, web_trans_id)
-                    if not session_id:
-                        return RefreshTokenResponseDto(success=False, message="No web session captured after login")
-
-                finally:
-                    await page.close()
-
-                # Mobile token exchange via a separate PKCE round-trip.
-                access_token, refresh_token = await _exchange_mobile_tokens(context, command.schulnetz_base_url)
-
-                # Snapshot the updated context for the caller to persist.
-                updated_state = await context.storage_state()
-
-                return RefreshTokenResponseDto(
-                    success=True,
-                    access_token=access_token,
-                    refresh_token=refresh_token,
-                    session_id=session_id,
-                    web_session_user_id=web_user_id,
-                    web_session_trans_id=web_trans_id,
-                    context_state=updated_state,
-                    message="Tokens and session refreshed successfully",
-                )
-
-            except Exception as ex:
-                logger.exception("Refresh failed")
-                return RefreshTokenResponseDto(success=False, message=f"Refresh failed: {ex}")
-            finally:
-                await browser.close()
-
-# ---------- internals ----------
-
-def _normalize_state(state: dict | None) -> dict | None:
-    """Coerce a context_state into the shape Playwright's storage_state expects.
-
-    Playwright requires `cookies` and `origins` to be arrays. A buggy caller may
-    persist them as objects/dicts (e.g. a keyed map, or arrays mangled into `{}`
-    by a serializer that can't handle the value type). When we get a dict, fall
-    back to its values; anything else non-list becomes an empty list so
-    `new_context` never rejects the shape.
-    """
-    if not state:
-        return state
-
-    def as_list(value):
-        if isinstance(value, list):
-            return value
-        if isinstance(value, dict):
-            return list(value.values())
-        return []
-
-    return {**state, "cookies": as_list(state.get("cookies")), "origins": as_list(state.get("origins"))}
-
-
-async def _perform_microsoft_sso(page, email: str, password: str) -> None:
-    email_input = 'input[type="email"], input[name="loginfmt"]'
-    await page.wait_for_selector(email_input, timeout=10_000)
-    await page.fill(email_input, email)
-    await page.click("#idSIButton9")
-
-    password_input = 'input[type="password"], input[name="passwd"]'
-    await page.wait_for_selector(password_input, timeout=10_000)
-    await page.fill(password_input, password)
-    await page.click("#idSIButton9")
-
-    # "Stay signed in?" prompt is best-effort.
-    try:
-        stay = page.locator("#idSIButton9")
-        await stay.wait_for(state="visible", timeout=5_000)
-        await stay.click()
-    except Exception:
-        pass
-
-def _extract_code_state(url: str) -> tuple[str | None, str | None]:
-    if "code=" not in url:
-        return None, None
-    qs = parse_qs(urlparse(url).query)
-    return qs.get("code", [None])[0], qs.get("state", [None])[0]
-
-async def _exchange_mobile_tokens(context, schulnetz_base_url: str) -> tuple[str | None, str | None]:
-    """Run a fresh PKCE flow inside the same context to mint mobile tokens."""
-    code_verifier = "".join(secrets.choice(string.ascii_letters + string.digits) for _ in range(128))
-    s256 = hashlib.sha256(code_verifier.encode()).digest()
-    code_challenge = base64.urlsafe_b64encode(s256).decode().rstrip("=")
-
-    auth_params = {
-        "response_type": "code",
-        "client_id": SCHULNETZ_CLIENT_ID,
-        "state": secrets.token_hex(16),
-        "redirect_uri": "",
-        "scope": "openid ",
-        "code_challenge": code_challenge,
-        "code_challenge_method": "S256",
-        "nonce": secrets.token_hex(16),
-    }
-
-    page = await context.new_page()
-    pkce_code: str | None = None
-    try:
-        captured = {"code": None}
-
-        async def intercept(route):
-            url = route.request.url
-            if "code=" in url:
-                captured["code"] = parse_qs(urlparse(url).query).get("code", [None])[0]
-            await route.abort()
-
-        await page.route("**/schulnetz.web.app/**", intercept)
-        await page.route("**/callback*code=*", intercept)
-
-        auth_url = f"{schulnetz_base_url}/authorize.php?{urlencode(auth_params)}"
         try:
-            await page.goto(auth_url, wait_until="load", timeout=30_000)
-        except Exception:
-            pass
+            # 1) Web session round-trip → PHPSESSID + id/transid.
+            web = generate_oauth_url(base, auth_type="web")
+            web_res = await self._login(web["auth_url"], command, cookies)
+            cookies = web_res.get("session_cookies") or cookies
+            web_cookies, web_info = await capture_web_session(
+                base, web_res["code"], web_res.get("state") or web["state"], web["code_verifier"]
+            )
+            if not web_cookies or "PHPSESSID" not in web_cookies:
+                return LoginResponseDto(success=False, message="No web session captured after login")
+            session_id = web_cookies["PHPSESSID"]
+            web_info = web_info or {}
 
-        pkce_code = captured["code"]
-        if not pkce_code and "code=" in page.url:
-            pkce_code = parse_qs(urlparse(page.url).query).get("code", [None])[0]
-    finally:
-        await page.close()
+            # 2) Mobile token round-trip → access/refresh tokens.
+            mob = generate_oauth_url(base, auth_type="mobile")
+            mob_res = await self._login(mob["auth_url"], command, cookies)
+            cookies = mob_res.get("session_cookies") or cookies
+            access_token, refresh_token = await exchange_code_for_tokens(
+                mob_res["code"], mob["code_verifier"], base
+            )
 
-    if not pkce_code:
-        return None, None
+            logger.info("login: php=%s id=%s transid=%s token=%s",
+                        bool(session_id), web_info.get("id"), web_info.get("transid"), bool(access_token))
 
-    async with httpx.AsyncClient() as client:
-        res = await client.post(
-            f"{schulnetz_base_url}/token.php",
-            data={
-                "grant_type": "authorization_code",
-                "code": pkce_code,
-                "redirect_uri": "",
-                "code_verifier": code_verifier,
-                "client_id": SCHULNETZ_CLIENT_ID,
-            },
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            return LoginResponseDto(
+                success=True,
+                access_token=access_token,
+                refresh_token=refresh_token,
+                session_id=session_id,
+                web_session_user_id=web_info.get("id"),
+                web_session_trans_id=web_info.get("transid"),
+                session_cookies=cookies,
+                message="Tokens and session refreshed successfully",
+            )
+
+        except NeedsCredentials:
+            return LoginResponseDto(
+                success=False,
+                message="Microsoft SSO session expired or no cookies given. Provide email + password to sign in.",
+            )
+        except MfaRequired as ex:
+            return LoginResponseDto(
+                success=False,
+                message=f"MFA required: {ex}. Provide a TOTP secret/code or re-authenticate interactively.",
+            )
+        except LoginFailed as ex:
+            return LoginResponseDto(success=False, message=f"Login failed: {ex}")
+        except Exception as ex:
+            logger.exception("Login failed")
+            return LoginResponseDto(success=False, message=f"Login failed: {ex}")
+
+    async def _login(self, authorize_url: str, command: LoginCommand, cookies):
+        """Run the synchronous ms-entrance login off the event loop. Seeds the
+        stored cookie jar for a silent SSO; falls back to credentials if given.
+        `cookies` is always an inline list or None — never a file on disk."""
+        return await asyncio.to_thread(
+            ms_login,
+            authorize_url,
+            username=command.email,
+            password=command.password,
+            totp_secret=command.totp_secret,
+            totp_code=command.totp_code,
+            cookies=cookies,
         )
-        if res.status_code != 200:
-            return None, None
-        data = res.json()
-        return data.get("access_token"), data.get("refresh_token")
-
-async def _capture_web_session(
-    schulnetz_base_url: str, code: str, state: str | None
-) -> tuple[str | None, str | None, str | None]:
-    # Delegate to the canonical capture: it exchanges the code at the school root
-    # `/` (NOT /loginto.php, which returns a "session expired" page) and uses
-    # WEB_HEADERS — so the refresh path mints a session identically to the initial
-    # OAuth capture, and the scraper's UA matches.
-    cookies, info = await capture_web_session(schulnetz_base_url, code, state or "")
-    if not cookies:
-        return None, None, None
-    info = info or {}
-    return cookies.get("PHPSESSID"), info.get("id"), info.get("transid")
-

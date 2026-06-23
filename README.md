@@ -48,8 +48,8 @@ X-Schulnetz-Base-Url: https://schulnetz.bbbaden.ch
 
 Requests without this header return `400 Bad Request`.
 
-The only exception is `POST /api/authenticate/refresh`, which accepts the base URL
-as a `schulnetz_base_url` field in its JSON body (so a refresh call carries
+The only exception is `POST /api/authenticate/login`, which accepts the base URL
+as a `schulnetz_base_url` field in its JSON body (so a login call carries
 everything it needs without extra headers).
 
 This makes a single SchulwareAPI deployment usable for any Schulnetz school

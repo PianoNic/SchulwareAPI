@@ -1,49 +1,48 @@
-"""DTOs for the stateless token refresh endpoints.
+"""DTOs for the unified, stateless Schulnetz login.
 
-The caller (e.g. the Schuly Schulware plugin) owns persistence of context_state
-and credentials. SchulwareAPI accepts state in, drives Playwright, returns the
-updated state out — without storing anything itself.
+One endpoint, one shape: the caller (e.g. the Schuly Schulware plugin) passes in
+credentials and/or a previously returned `session_cookies` jar, SchulwareAPI
+replays it headlessly through Microsoft Entra (via `ms-entrance`), and returns
+fresh tokens, the web session, and the rotated `session_cookies` to persist —
+storing nothing itself. Input in, output out.
 """
 
-from typing import Any
 from pydantic import BaseModel, Field
 
-class RefreshTokenRequestDto(BaseModel):
-    """Stateless refresh using a previously captured browser context.
 
-    This is the recommended refresh path. No credentials are sent — the request
-    succeeds only if the supplied `context_state` is still valid. When it
-    expires, re-authenticate via `/api/authenticate/oauth/mobile/url` rather
-    than reaching for the deprecated credentials endpoint.
+class LoginRequestDto(BaseModel):
+    """Unified Schulnetz auth — one call for every sign-in path.
+
+    Pass `session_cookies` from a previous response for a silent, passwordless
+    re-auth, and/or `email` + `password` (+ TOTP) for a headless credential
+    login. When both are present the cookies are tried first and the credentials
+    are the fallback. No browser, no WebView.
     """
+
     schulnetz_base_url: str = Field(..., description="The Schulnetz instance base URL, e.g. https://schulnetz.example.ch")
-    context_state: dict[str, Any] = Field(
-        ...,
-        description="Browser context state (cookies + localStorage) from a previous successful refresh or OAuth capture.",
+    session_cookies: list[dict] | None = Field(
+        default=None,
+        description="Microsoft session cookies from a previous login, for a silent (passwordless) re-auth.",
     )
-    user_agent: str | None = Field(default=None, description="UA string to replay with. Microsoft binds session cookies to UA; mismatch invalidates the session.")
+    email: str | None = Field(default=None, description="Microsoft SSO email (for a credential login or cold-start).")
+    password: str | None = Field(default=None, description="Microsoft SSO password.")
+    totp_secret: str | None = Field(default=None, description="Base32 TOTP secret, if the account has authenticator-app MFA. A fresh code is generated per attempt.")
+    totp_code: str | None = Field(default=None, description="A precomputed 6-digit TOTP code, used as-is. Alternative to totp_secret.")
+    user_agent: str | None = Field(default=None, description="UA to replay with. Microsoft binds session cookies to UA; a mismatch invalidates them.")
 
-class RefreshTokenWithCredentialsRequestDto(BaseModel):
-    """⚠️ DEPRECATED. Refresh by replaying full Microsoft SSO with credentials.
 
-    Provided only as a last-resort fallback for the very first refresh after
-    cold-start. Use `/api/authenticate/refresh` with a stored `context_state`
-    for every subsequent call.
-    """
-    schulnetz_base_url: str = Field(..., description="The Schulnetz instance base URL, e.g. https://schulnetz.example.ch")
-    email: str = Field(..., description="Microsoft SSO email.")
-    password: str = Field(..., description="Microsoft SSO password.")
-    user_agent: str | None = Field(default=None, description="UA string to use for the new session.")
+class LoginResponseDto(BaseModel):
+    """Everything a caller needs from one login: mobile tokens, the web session,
+    and the rotated cookie jar to persist for the next (passwordless) call."""
 
-class RefreshTokenResponseDto(BaseModel):
     success: bool
     access_token: str | None = None
     refresh_token: str | None = None
     session_id: str | None = None
     web_session_user_id: str | None = None
     web_session_trans_id: str | None = None
-    context_state: dict[str, Any] | None = Field(
+    session_cookies: list[dict] | None = Field(
         default=None,
-        description="Updated browser context state. The caller MUST persist this and pass it back on the next call.",
+        description="Rotated Microsoft session cookies. The caller MUST persist these and pass them back as session_cookies on the next call.",
     )
     message: str | None = None

@@ -1,7 +1,6 @@
 """DTOs for web session endpoints."""
 
 from pydantic import BaseModel, Field
-from typing import Any
 
 from src.application.dtos.web.scrape_dtos import (
     AbsencesPageDto,
@@ -13,20 +12,6 @@ from src.application.dtos.web.scrape_dtos import (
     ScheduleEventDto,
     WebStudentIdCardDto,
 )
-
-class WebSessionRequestDto(BaseModel):
-    """Request DTO for capturing a web session from an OAuth code."""
-    code: str = Field(..., description="OAuth authorization code from Microsoft SSO")
-    state: str = Field(..., description="OAuth state parameter")
-    code_verifier: str | None = Field(None, description="PKCE code_verifier from /websession/oauth/url")
-
-class WebSessionResponseDto(BaseModel):
-    """Response DTO for web session capture."""
-    success: bool = Field(..., description="Whether session capture was successful")
-    session_id: str | None = Field(None, description="PHPSESSID value")
-    cookies: dict[str, str] | None = Field(None, description="All captured session cookies")
-    session_info: dict[str, Any] | None = Field(None, description="Session parameters (id, transid, navigation_urls)")
-    message: str | None = Field(None, description="Status message")
 
 class WebScrapeRequestDto(BaseModel):
     """Request DTO for scraping a Schulnetz page."""
