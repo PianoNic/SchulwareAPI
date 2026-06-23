@@ -1,0 +1,12 @@
+{
+  "name": "SchulwareAPI",
+  "short_name": "SchulwareAPI",
+  "icons": [
+    { "src": "/icon-192.png", "type": "image/png", "sizes": "192x192" },
+    { "src": "/icon-maskable.png", "type": "image/png", "sizes": "512x512", "purpose": "maskable" },
+    { "src": "/icon-512.png", "type": "image/png", "sizes": "512x512", "purpose": "any" }
+  ],
+  "theme_color": "#0B57A4",
+  "background_color": "#FFFFFF",
+  "display": "standalone"
+}
