@@ -21,7 +21,7 @@ from mediatorx import ICommand, ICommandHandler
 
 from src.api.auth.auth import exchange_code_for_tokens, generate_oauth_url
 from src.application.dtos.refresh_dtos import LoginResponseDto
-from src.application.services.web_session_service import capture_web_session
+from src.application.services.web_session_service import capture_web_session, discover_web_oauth
 from src.infrastructure.logging_config import get_logger
 
 logger = get_logger("login_command")
@@ -50,12 +50,21 @@ class LoginHandler(ICommandHandler[LoginCommand, LoginResponseDto]):
             logger.info("Login: replaying %d stored cookies", len(cookies))
 
         try:
-            # 1) Web session round-trip → PHPSESSID + id/transid.
-            web = generate_oauth_url(base, auth_type="web")
-            web_res = await self._login(web["auth_url"], command, cookies)
+            # 1) Web session round-trip → PHPSESSID + id/transid. Replicate the
+            # browser: start OAuth from the school root (redirect_uri=`/`, no PKCE)
+            # so the callback lands on `/` and renders the dashboard whose links
+            # carry id/transid — authorize.php instead bounces the callback to
+            # itself on a bare page. Drive the discovered Microsoft authorize URL,
+            # then deliver the full callback (incl. session_state) back to `/` with
+            # the anonymous session cookie the school set.
+            web_authorize_url, anon_cookies = await discover_web_oauth(base)
+            web_res = await self._login(web_authorize_url, command, cookies, ms_redirect=True)
             cookies = web_res.get("session_cookies") or cookies
+            callback_url = web_res.get("redirect_url")
+            if not callback_url:
+                return LoginResponseDto(success=False, message="No web callback URL from login")
             web_cookies, web_info = await capture_web_session(
-                base, web_res["code"], web_res.get("state") or web["state"], web["code_verifier"]
+                base, callback_url, seed_cookies=anon_cookies
             )
             if not web_cookies or "PHPSESSID" not in web_cookies:
                 return LoginResponseDto(success=False, message="No web session captured after login")
@@ -100,10 +109,12 @@ class LoginHandler(ICommandHandler[LoginCommand, LoginResponseDto]):
             logger.exception("Login failed")
             return LoginResponseDto(success=False, message=f"Login failed: {ex}")
 
-    async def _login(self, authorize_url: str, command: LoginCommand, cookies):
+    async def _login(self, authorize_url: str, command: LoginCommand, cookies, ms_redirect: bool = False):
         """Run the synchronous ms-entrance login off the event loop. Seeds the
         stored cookie jar for a silent SSO; falls back to credentials if given.
-        `cookies` is always an inline list or None — never a file on disk."""
+        `cookies` is always an inline list or None — never a file on disk.
+        With ms_redirect=True the raw Microsoft → provider callback URL is returned
+        (incl. session_state) without consuming the code."""
         return await asyncio.to_thread(
             ms_login,
             authorize_url,
@@ -112,4 +123,5 @@ class LoginHandler(ICommandHandler[LoginCommand, LoginResponseDto]):
             totp_secret=command.totp_secret,
             totp_code=command.totp_code,
             cookies=cookies,
+            ms_redirect=ms_redirect,
         )
