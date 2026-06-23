@@ -15,48 +15,73 @@ WEB_HEADERS = {
     "Sec-Fetch-Mode": "navigate",
 }
 
+async def discover_web_oauth(schulnetz_base_url: str) -> tuple[str, dict[str, str]]:
+    """Start the OAuth flow from the school root, like a browser.
+
+    GET `/` (unauthenticated), follow the redirect chain to the Microsoft
+    authorize URL, and return it together with the anonymous PHPSESSID the school
+    set. The root flow uses redirect_uri=`/` (no PKCE), so the eventual callback
+    lands on `/` and renders the full dashboard (with id/transid) — unlike
+    authorize.php, whose callback returns to itself on a bare page.
+    """
+    async with httpx.AsyncClient(headers=WEB_HEADERS, follow_redirects=True, timeout=30.0) as client:
+        r = await client.get(f"{schulnetz_base_url}/")
+        anon: dict[str, str] = {}
+        for resp in r.history + [r]:
+            anon.update(dict(resp.cookies))
+        logger.info(f"Discovered web authorize URL via root; anon cookies: {list(anon.keys())}")
+        return str(r.url), anon
+
+
 async def capture_web_session(
     schulnetz_base_url: str,
-    code: str,
-    state: str,
+    callback_url: str,
     code_verifier: str | None = None,
+    seed_cookies: dict[str, str] | None = None,
 ) -> tuple[dict[str, str] | None, dict[str, str] | None]:
     """
-    Exchange an OAuth authorization code for a Schulnetz PHP web session.
+    Deliver the Microsoft → Schulnetz OAuth callback to establish a PHP web session.
 
-    Uses loginto.php (the actual Schulnetz callback endpoint) to exchange
-    the OAuth code for a PHPSESSID cookie. Pure HTTP, no browser needed.
-
-    Args:
-        schulnetz_base_url: e.g. https://schulnetz.bbbaden.ch
-        code: OAuth authorization code from Microsoft SSO
-        state: OAuth state parameter
-        code_verifier: PKCE code_verifier (required if authorize.php was called with code_challenge)
+    `callback_url` is the raw redirect Microsoft issues back to the provider, e.g.
+    ``https://schulnetz.bbbaden.ch/?code=..&state=..&session_state=..``. Delivering
+    it WHOLE — session_state included — is what makes Schulnetz complete the login
+    and render the full dashboard (whose links carry id/transid). A reconstructed
+    code-only exchange instead lands on a bare loginto.php page with neither.
+    `code_verifier` is appended as a fallback for PKCE-enforced instances if the
+    bare callback doesn't establish a session.
 
     Returns:
         Tuple of (cookies_dict, session_info) or (None, None) if failed.
-        session_info contains: id, transid, navigation_urls extracted from the landing page.
+        session_info contains: id, transid, navigation_urls from the dashboard.
     """
-    # Schulnetz's OAuth callback is the school root (`/`), NOT `/loginto.php`.
-    # The root handler exchanges the code with Microsoft, sets PHPSESSID, and
-    # then redirects internally to /loginto.php?mode=4&lang= which renders the
-    # dashboard. Hitting /loginto.php?code=... directly returns a
-    # "session expired" error page.
-    login_url = f"{schulnetz_base_url}/"
-    params: dict[str, str] = {"code": code, "state": state}
-    if code_verifier:
-        params["code_verifier"] = code_verifier
+    def _collect(resp) -> dict[str, str]:
+        c: dict[str, str] = {}
+        for r in resp.history + [resp]:
+            c.update(dict(r.cookies))
+        return c
 
-    logger.info(f"Exchanging OAuth code for web session via loginto.php")
-    logger.info(f"Code length: {len(code)}, State: {state[:20]}...")
+    logger.info("Delivering web OAuth callback to Schulnetz")
 
-    async with httpx.AsyncClient(headers=WEB_HEADERS, follow_redirects=True, timeout=30.0) as client:
+    async with httpx.AsyncClient(headers=WEB_HEADERS, follow_redirects=True, timeout=30.0, cookies=seed_cookies or {}) as client:
         try:
-            response = await client.get(login_url, params=params)
+            response = await client.get(callback_url)
+            cookies = _collect(response)
+            session_info = _extract_session_info(str(response.url), response.text)
 
-            cookies = {}
-            for resp in response.history + [response]:
-                cookies.update(dict(resp.cookies))
+            # PKCE-enforced instances may need the verifier on the callback to
+            # complete the exchange — retry with it appended if the bare callback
+            # didn't yield a full session (id + transid).
+            full = (
+                "PHPSESSID" in cookies and session_info
+                and session_info.get("id") and session_info.get("transid")
+            )
+            if code_verifier and not full:
+                sep = "&" if "?" in callback_url else "?"
+                response = await client.get(f"{callback_url}{sep}code_verifier={code_verifier}")
+                cookies = _collect(response) or cookies
+                follow = _extract_session_info(str(response.url), response.text)
+                if follow:
+                    session_info = {**(session_info or {}), **follow}
 
             logger.info(f"Final status: {response.status_code}, URL: {response.url}")
             logger.info(f"Cookies captured: {list(cookies.keys())}")
@@ -65,11 +90,9 @@ async def capture_web_session(
                 logger.warning("No PHPSESSID captured — login may have failed")
                 return None, None
 
-            session_info = _extract_session_info(str(response.url), response.text)
-
             logger.info(f"Session captured. PHPSESSID: {cookies['PHPSESSID'][:20]}...")
             if session_info:
-                logger.info(f"Session id: {session_info.get('id')}, pages: {len(session_info.get('navigation_urls', {}))}")
+                logger.info(f"Session id: {session_info.get('id')}, transid: {session_info.get('transid')}, pages: {len(session_info.get('navigation_urls', {}))}")
 
             return cookies, session_info
 
@@ -104,10 +127,16 @@ def _extract_session_info(url: str, html: str) -> dict[str, str] | None:
     if navigation_urls:
         info["navigation_urls"] = navigation_urls
 
+    # Dashboard links (index.php?pageid=..&id=..&transid=..) carry id/transid even
+    # when the landing URL doesn't — fall back to the page body for both.
     if not info.get("id"):
-        id_match = re.search(r'[?&]id=([a-f0-9]+)', html)
-        if id_match:
-            info["id"] = id_match.group(1)
+        m = re.search(r'[?&]id=([a-f0-9]+)', html)
+        if m:
+            info["id"] = m.group(1)
+    if not info.get("transid"):
+        m = re.search(r'[?&]transid=([a-f0-9]+)', html)
+        if m:
+            info["transid"] = m.group(1)
 
     return info if info else None
 
