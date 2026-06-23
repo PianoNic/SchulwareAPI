@@ -14,8 +14,10 @@ SchulwareAPI is a unified FastAPI application that provides access to Schulnetz 
 
 ### Environment Setup
 - Copy `.env.example` to `.env` and configure:
-  - `SCHULNETZ_WEB_BASE_URL`: Base URL for web scraping (PWA host)
-  - `SCHULNETZ_CLIENT_ID`: Client ID for API access
+  - `SCHULNETZ_WEB_BASE_URL`: PWA host for web scraping. **Optional** — defaults to
+    the public host (`src/application/constants.py`); set only to override.
+  - `SCHULNETZ_CLIENT_ID`: Schulnetz mobile client id. **Optional** — defaults to the
+    public id (`src/application/constants.py`); set only to override.
   - `SENTRY_DSN`: (Optional) GlitchTip Data Source Name for error reporting
 - The per-school API base URL is **not** configured here. Clients pass it
   per-request via the `X-Schulnetz-Base-Url` header (or the `schulnetz_base_url`

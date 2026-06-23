@@ -2,6 +2,7 @@ import httpx
 from typing import Any
 from src.infrastructure.logging_config import get_logger
 from src.infrastructure.monitoring import monitor_performance, add_breadcrumb, capture_exception
+from src.application.constants import DEFAULT_SCHULNETZ_CLIENT_ID, DEFAULT_SCHULNETZ_WEB_BASE_URL
 from src.application.services.env_service import get_env_variable
 from src.application.services.token_service import token_service, ApplicationType
 from src.application.services.test_token_config import is_test_token, get_mock_data
@@ -11,8 +12,8 @@ logger = get_logger("web_scraper")
 
 class SchulnetzWebService:
     def __init__(self):
-        self.base_url = get_env_variable("SCHULNETZ_WEB_BASE_URL")
-        self.client_id = get_env_variable("SCHULNETZ_CLIENT_ID")
+        self.base_url = get_env_variable("SCHULNETZ_WEB_BASE_URL", DEFAULT_SCHULNETZ_WEB_BASE_URL)
+        self.client_id = get_env_variable("SCHULNETZ_CLIENT_ID", DEFAULT_SCHULNETZ_CLIENT_ID)
     
     def _get_web_session_cookies(self, user_id: str) -> dict[str, str]:
         """Get web session cookies from stored session data"""

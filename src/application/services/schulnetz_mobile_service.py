@@ -1,5 +1,6 @@
 import httpx
 from typing import Any
+from src.application.constants import DEFAULT_SCHULNETZ_CLIENT_ID
 from src.application.services.env_service import get_env_variable
 from src.application.services.token_service import token_service, ApplicationType
 from src.application.services.test_token_config import is_test_token, get_mock_data
@@ -11,7 +12,7 @@ logger = get_logger("mobile_api")
 class SchulnetzMobileService:
     def __init__(self):
         self.base_url = get_env_variable("SCHULNETZ_API_BASE_URL")
-        self.client_id = get_env_variable("SCHULNETZ_CLIENT_ID")
+        self.client_id = get_env_variable("SCHULNETZ_CLIENT_ID", DEFAULT_SCHULNETZ_CLIENT_ID)
     
     async def get_user_info(self, user_id: str, token: str | None = None) -> Dict | None:
         """Get user information from mobile API"""
