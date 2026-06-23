@@ -1,6 +1,6 @@
 # <p align="center">SchulwareAPI</p>
 <p align="center">
-  <img src="./assets/schulwareapi_logo.png" width="200" alt="SchulwareAPI Logo">
+  <img src="./assets/icon.svg" width="200" alt="SchulwareAPI Logo">
 </p>
 <p align="center">
   <strong>Unified API for Schulnetz, simplifying data access with dynamic routing.</strong>

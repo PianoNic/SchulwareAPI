@@ -1,8 +1,11 @@
 import os
+from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.openapi.utils import get_openapi
 from fastapi.routing import APIRoute
+from fastapi.staticfiles import StaticFiles
 from slowapi.errors import RateLimitExceeded
 
 from src.api.controllers import (
@@ -69,9 +72,21 @@ app = FastAPI(
     description=_API_DESCRIPTION,
     version=app_config.get_version(),
     redoc_url=None,
-    docs_url="/",
+    docs_url=None,  # custom docs route below wires up the favicon
     generate_unique_id_function=_custom_operation_id,
 )
+
+# Static assets (icon.svg, manifest, favicons)
+_ASSETS_DIR = Path(__file__).resolve().parents[2] / "assets"
+app.mount("/assets", StaticFiles(directory=_ASSETS_DIR), name="assets")
+
+@app.get("/", include_in_schema=False)
+def swagger_ui():
+    return get_swagger_ui_html(
+        openapi_url=app.openapi_url,
+        title=f"{app.title} - Docs",
+        swagger_favicon_url="/assets/icon.svg",
+    )
 
 # Sentry middleware for enhanced error tracking
 app.add_middleware(SentryMiddleware)
