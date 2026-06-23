@@ -8,13 +8,9 @@ and dispatch via `mediator.send(...)`.
 from fastapi import Header, HTTPException
 from mediatorx import Mediator
 
-from src.application.commands.capture_web_session_command import (
-    CaptureWebSessionCommand,
-    CaptureWebSessionHandler,
-)
 from src.application.commands.refresh_token_command import (
-    RefreshTokenCommand,
-    RefreshTokenHandler,
+    LoginCommand,
+    LoginHandler,
 )
 from src.application.queries.get_app_info_query import (
     GetAppInfoQuery,
@@ -37,8 +33,7 @@ def build_mediator() -> Mediator:
     m = Mediator()
 
     # Commands
-    m.register(CaptureWebSessionCommand, CaptureWebSessionHandler)
-    m.register(RefreshTokenCommand, RefreshTokenHandler)
+    m.register(LoginCommand, LoginHandler)
 
     # Queries
     m.register(GetAppInfoQuery, GetAppInfoHandler)

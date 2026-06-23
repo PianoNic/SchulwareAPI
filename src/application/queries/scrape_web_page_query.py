@@ -117,7 +117,7 @@ class ScrapeWebPageHandler(IQueryHandler[ScrapeWebPageQuery, WebScrapeResponseDt
             if grades is None:
                 return WebScrapeResponseDto(
                     success=False,
-                    message="Session expired or page not accessible. Re-authenticate with /capture.",
+                    message="Session expired or page not accessible. Re-authenticate with /api/authenticate/login.",
                 )
             return WebScrapeResponseDto(success=True, grades=grades)
 
