@@ -4,13 +4,10 @@ from mediatorx import Mediator
 from src.api.controller import controller
 from src.api.dependencies import get_mediator, get_schulnetz_base_url
 from src.api.rate_limit import shared_limiter
-from src.application.commands.capture_web_session_command import CaptureWebSessionCommand
 from src.application.dtos.web_session_dtos import (
     WebDownloadRequestDto,
     WebScrapeRequestDto,
     WebScrapeResponseDto,
-    WebSessionRequestDto,
-    WebSessionResponseDto,
 )
 from src.application.queries.scrape_web_page_query import ScrapeWebPageQuery
 from src.application.queries.validate_web_session_query import ValidateWebSessionQuery
@@ -25,21 +22,6 @@ router = APIRouter(prefix="/api/websession", tags=["Web Session"])
 class WebSessionController:
     mediator: Mediator = Depends(get_mediator)
 
-    @router.post("/capture", response_model=WebSessionResponseDto)
-    @shared_limiter.limit("5/minute")
-    async def capture_session(
-        self,
-        request: Request,
-        body: WebSessionRequestDto,
-        base_url: str = Depends(get_schulnetz_base_url),
-    ):
-        """Exchange an OAuth code for a Schulnetz PHP web session.
-        Returns PHPSESSID cookie and session parameters (id, transid) needed for scraping.
-        """
-        return await self.mediator.send(
-            CaptureWebSessionCommand(body.code, base_url, body.state, body.code_verifier)
-        )
-
     @router.post("/scrape", response_model=WebScrapeResponseDto)
     @shared_limiter.limit("30/minute")
     async def scrape(
@@ -51,7 +33,7 @@ class WebSessionController:
         """Scrape and parse a Schulnetz page.
 
         Available pages: home, grades, absences, agenda, lessons, documents, student_id, schedule.
-        Requires session_id (PHPSESSID), id, and transid from a previous /capture call.
+        Requires session_id (PHPSESSID), id, and transid from a previous /api/authenticate/login call.
         """
         return await self.mediator.send(ScrapeWebPageQuery(body, base_url=base_url))
 

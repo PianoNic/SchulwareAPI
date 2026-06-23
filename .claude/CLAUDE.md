@@ -18,8 +18,8 @@ SchulwareAPI is a unified FastAPI application that provides access to Schulnetz 
   - `SCHULNETZ_CLIENT_ID`: Client ID for API access
   - `SENTRY_DSN`: (Optional) GlitchTip Data Source Name for error reporting
 - The per-school API base URL is **not** configured here. Clients pass it
-  per-request via the `X-Schulnetz-Base-Url` header (or `schulnetz_base_url`
-  body field on `/api/authenticate/refresh`).
+  per-request via the `X-Schulnetz-Base-Url` header (or the `schulnetz_base_url`
+  body field on `/api/authenticate/login`).
 
 ### Dependencies
 - Install: `pip install -r requirements.txt`
@@ -61,9 +61,11 @@ Controllers use `SchulwareAPIRouter` which auto-generates paths:
 - Handler registration is centralized in `src/api/dependencies.py`
 
 ### Authentication Flow
-- Stateless: the caller owns persistence of OAuth tokens and browser `context_state`
-- `/api/authenticate/oauth/mobile/url` + `/callback` for first-time PKCE flow
-- `/api/authenticate/refresh` for passwordless refresh using stored `context_state`
+- Stateless: the caller owns persistence of the returned `session_cookies` jar
+- **One endpoint** — `POST /api/authenticate/login`. Pass `email` + `password`
+  (+ `totp_secret`/`totp_code`) for a credential login, and/or `session_cookies`
+  from a previous response for a silent passwordless re-auth. Returns mobile
+  tokens, the web session (PHPSESSID + id/transid), and rotated `session_cookies`.
 - Bearer token authentication on mobile-proxy endpoints
 
 ## Key Technologies
@@ -93,5 +95,5 @@ Controllers use `SchulwareAPIRouter` which auto-generates paths:
 
 ## State
 SchulwareAPI is **stateless** — there is no database. Per-user data (OAuth tokens,
-browser context_state, web session cookies) is held by the calling client and
+session_cookies, web session params) is held by the calling client and
 passed back in on each request.

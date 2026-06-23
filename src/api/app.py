@@ -58,7 +58,7 @@ Requests without this header return `400 Bad Request`. This lets a single
 SchulwareAPI deployment serve any Schulnetz school instance — the caller
 decides per request.
 
-The only exception is `POST /api/authenticate/refresh`, which carries the base
+The only exception is `POST /api/authenticate/login`, which carries the base
 URL as a `schulnetz_base_url` field in its JSON body instead.
 
 **Environment:** {app_config.get_environment()}

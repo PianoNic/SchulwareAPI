@@ -1,12 +1,11 @@
-"""Stateless token + session refresh via headless `ms-entrance` login.
+"""Stateless Schulnetz login via headless `ms-entrance`.
 
-State contract: the caller passes `context_state` (a cookie jar) in; we replay
-it through Microsoft Entra with the `ms-entrance` package — no browser — and on
-success return the updated jar for the caller to persist. SchulwareAPI itself
-stores nothing.
+Input in, output out: the caller passes credentials and/or a `session_cookies`
+jar; we replay it through Microsoft Entra with `ms-entrance` — no browser — and
+return fresh tokens, the web session, and the rotated `session_cookies` to
+persist. SchulwareAPI stores nothing.
 
-The flow is two cookie-sharing logins fed into Schulnetz's existing pure-HTTP
-exchanges:
+The flow is two cookie-sharing logins fed into Schulnetz's pure-HTTP exchanges:
   1. a "web" authorize round-trip → code → `capture_web_session` → PHPSESSID
   2. a "mobile" authorize round-trip → code → `exchange_code_for_tokens` → tokens
 `ms_login` seeds the stored cookies for a silent SSO; if they're stale it falls
@@ -21,33 +20,34 @@ from entrance import login as ms_login
 from mediatorx import ICommand, ICommandHandler
 
 from src.api.auth.auth import exchange_code_for_tokens, generate_oauth_url
-from src.application.dtos.refresh_dtos import RefreshTokenResponseDto
+from src.application.dtos.refresh_dtos import LoginResponseDto
 from src.application.services.web_session_service import capture_web_session
 from src.infrastructure.logging_config import get_logger
 
-logger = get_logger("refresh_token_command")
+logger = get_logger("login_command")
 
 
 @dataclass
-class RefreshTokenCommand(ICommand[RefreshTokenResponseDto]):
+class LoginCommand(ICommand[LoginResponseDto]):
     schulnetz_base_url: str
-    context_state: dict | None = None
+    session_cookies: list | None = None
     email: str | None = None
     password: str | None = None
     totp_secret: str | None = None
+    totp_code: str | None = None
     user_agent: str | None = None
 
 
-class RefreshTokenHandler(ICommandHandler[RefreshTokenCommand, RefreshTokenResponseDto]):
-    """Mint fresh mobile + web tokens by replaying the stored cookie jar through
-    Microsoft Entra (headless, via ms-entrance), then exchanging the resulting
-    authorization codes at Schulnetz over plain HTTP."""
+class LoginHandler(ICommandHandler[LoginCommand, LoginResponseDto]):
+    """Mint fresh mobile + web tokens by replaying the cookie jar (or credentials)
+    through Microsoft Entra headlessly via ms-entrance, then exchanging the
+    resulting authorization codes at Schulnetz over plain HTTP."""
 
-    async def handle(self, command: RefreshTokenCommand) -> RefreshTokenResponseDto:
+    async def handle(self, command: LoginCommand) -> LoginResponseDto:
         base = command.schulnetz_base_url.rstrip("/")
-        cookies = _cookies_from_state(command.context_state)
+        cookies = command.session_cookies or None
         if cookies:
-            logger.info("Refresh: replaying %d stored cookies", len(cookies))
+            logger.info("Login: replaying %d stored cookies", len(cookies))
 
         try:
             # 1) Web session round-trip → PHPSESSID + id/transid.
@@ -58,7 +58,7 @@ class RefreshTokenHandler(ICommandHandler[RefreshTokenCommand, RefreshTokenRespo
                 base, web_res["code"], web_res.get("state") or web["state"], web["code_verifier"]
             )
             if not web_cookies or "PHPSESSID" not in web_cookies:
-                return RefreshTokenResponseDto(success=False, message="No web session captured after login")
+                return LoginResponseDto(success=False, message="No web session captured after login")
             session_id = web_cookies["PHPSESSID"]
             web_info = web_info or {}
 
@@ -70,59 +70,46 @@ class RefreshTokenHandler(ICommandHandler[RefreshTokenCommand, RefreshTokenRespo
                 mob_res["code"], mob["code_verifier"], base
             )
 
-            logger.info("refresh: php=%s id=%s transid=%s token=%s",
+            logger.info("login: php=%s id=%s transid=%s token=%s",
                         bool(session_id), web_info.get("id"), web_info.get("transid"), bool(access_token))
 
-            return RefreshTokenResponseDto(
+            return LoginResponseDto(
                 success=True,
                 access_token=access_token,
                 refresh_token=refresh_token,
                 session_id=session_id,
                 web_session_user_id=web_info.get("id"),
                 web_session_trans_id=web_info.get("transid"),
-                context_state={"cookies": cookies, "origins": []},
+                session_cookies=cookies,
                 message="Tokens and session refreshed successfully",
             )
 
         except NeedsCredentials:
-            return RefreshTokenResponseDto(
+            return LoginResponseDto(
                 success=False,
-                message="Microsoft SSO session expired. Re-authenticate via /api/authenticate/oauth/mobile/url.",
+                message="Microsoft SSO session expired or no cookies given. Provide email + password to sign in.",
             )
         except MfaRequired as ex:
-            return RefreshTokenResponseDto(
+            return LoginResponseDto(
                 success=False,
-                message=f"MFA required: {ex}. Provide a TOTP secret or re-authenticate interactively.",
+                message=f"MFA required: {ex}. Provide a TOTP secret/code or re-authenticate interactively.",
             )
         except LoginFailed as ex:
-            return RefreshTokenResponseDto(success=False, message=f"Login failed: {ex}")
+            return LoginResponseDto(success=False, message=f"Login failed: {ex}")
         except Exception as ex:
-            logger.exception("Refresh failed")
-            return RefreshTokenResponseDto(success=False, message=f"Refresh failed: {ex}")
+            logger.exception("Login failed")
+            return LoginResponseDto(success=False, message=f"Login failed: {ex}")
 
-    async def _login(self, authorize_url: str, command: RefreshTokenCommand, cookies):
+    async def _login(self, authorize_url: str, command: LoginCommand, cookies):
         """Run the synchronous ms-entrance login off the event loop. Seeds the
         stored cookie jar for a silent SSO; falls back to credentials if given.
-        `cookies` is always an inline list or None — never the default file."""
+        `cookies` is always an inline list or None — never a file on disk."""
         return await asyncio.to_thread(
             ms_login,
             authorize_url,
             username=command.email,
             password=command.password,
             totp_secret=command.totp_secret,
+            totp_code=command.totp_code,
             cookies=cookies,
         )
-
-
-def _cookies_from_state(state: dict | None) -> list | None:
-    """Pull the inline cookie list out of a stored context_state. Accepts the
-    legacy Playwright storage_state shape (`{cookies: [...], origins: [...]}`)
-    and tolerates a dict-of-cookies from a buggy serializer."""
-    if not state:
-        return None
-    cookies = state.get("cookies")
-    if isinstance(cookies, list):
-        return cookies or None
-    if isinstance(cookies, dict):
-        return list(cookies.values()) or None
-    return None
