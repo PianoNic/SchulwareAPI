@@ -5,6 +5,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project Overview
 SchulwareAPI is a unified FastAPI application that provides access to Schulnetz systems through both mobile REST endpoints and web scraping. It includes interactive Swagger UI documentation and supports Docker deployment.
 
+## Code formatting
+
+**Declaration signatures go on one line** - don't wrap a function / method parameter list across multiple lines, however long it gets. This applies to *declarations*, not call sites: leave call sites, comprehensions, collection literals, and multi-line conditionals (`if` / `for` / `while`) wrapped as they are.
+
 ## Development Commands
 
 ### Running the Application
