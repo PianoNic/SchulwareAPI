@@ -284,8 +284,6 @@ def monitor_performance(operation: str):
                         context={
                             "operation": operation,
                             "function": func.__name__,
-                            "args": str(args)[:200],
-                            "kwargs": str(kwargs)[:200]
                         }
                     )
                     raise
@@ -312,8 +310,6 @@ def monitor_performance(operation: str):
                         context={
                             "operation": operation,
                             "function": func.__name__,
-                            "args": str(args)[:200],
-                            "kwargs": str(kwargs)[:200]
                         }
                     )
                     raise
