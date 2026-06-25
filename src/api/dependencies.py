@@ -8,6 +8,8 @@ and dispatch via `mediator.send(...)`.
 from fastapi import Header, HTTPException
 from mediatorx import Mediator
 
+from src.api.url_guard import validate_base_url
+
 from src.application.commands.refresh_token_command import (
     LoginCommand,
     LoginHandler,
@@ -69,4 +71,4 @@ def get_schulnetz_base_url(
             status_code=400,
             detail="Missing required header 'X-Schulnetz-Base-Url'.",
         )
-    return x_schulnetz_base_url.rstrip("/")
+    return validate_base_url(x_schulnetz_base_url)

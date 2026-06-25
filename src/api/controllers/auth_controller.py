@@ -4,6 +4,7 @@ from mediatorx import Mediator
 from src.api.controller import controller
 from src.api.dependencies import get_mediator
 from src.api.rate_limit import shared_limiter
+from src.api.url_guard import validate_base_url
 from src.application.commands.refresh_token_command import LoginCommand
 from src.application.dtos.refresh_dtos import LoginRequestDto, LoginResponseDto
 
@@ -28,7 +29,7 @@ class AuthController:
         rotated `session_cookies` to persist for the next call.
         """
         return await self.mediator.send(LoginCommand(
-            schulnetz_base_url=body.schulnetz_base_url,
+            schulnetz_base_url=validate_base_url(body.schulnetz_base_url),
             session_cookies=body.session_cookies,
             email=body.email,
             password=body.password,
