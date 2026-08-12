@@ -67,7 +67,7 @@ def _build_controller(router: APIRouter, cls: type[T], *urls: str, instance: Any
 def _init_controller(cls: type[Any], instance: Any = None) -> None:
     """Idempotently rewrite `cls.__init__` so FastAPI can inject class-annotated dependencies."""
     if getattr(cls, CONTROLLER_CLASS_KEY, False):
-        return  # already initialized
+        return
     old_init: Callable[..., Any] = cls.__init__
     old_signature = inspect.signature(old_init)
     old_parameters = list(old_signature.parameters.values())[1:]  # drop `self`

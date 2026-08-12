@@ -11,5 +11,4 @@ from src.application.dtos.web.scrape_dtos import AgendaPageDto
 
 
 def scrape_agenda(html: str) -> AgendaPageDto:
-    # The static agenda HTML carries no event rows (the widget loads them via XML).
     return AgendaPageDto(events=[])

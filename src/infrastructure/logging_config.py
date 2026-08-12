@@ -3,23 +3,19 @@ import colorlog
 
 class CustomFormatter(colorlog.ColoredFormatter):
     def format(self, record):
-        # Map logger names to more user-friendly names
         name_mappings = {
             'uvicorn.error': 'server',
             'uvicorn.access': 'access',
             'uvicorn': 'server'
         }
-        
-        # Store original name and replace temporarily
+
         original_name = record.name
         record.name = name_mappings.get(record.name, record.name)
-        
-        # Format the message
+
         formatted = super().format(record)
-        
-        # Restore original name
+
         record.name = original_name
-        
+
         return formatted
 
 def setup_colored_logging():
@@ -36,15 +32,13 @@ def setup_colored_logging():
         }
     )
     handler.setFormatter(formatter)
-    
-    # Configure root logger
+
     root_logger = logging.getLogger()
     root_logger.handlers = []
     root_logger.addHandler(handler)
     root_logger.setLevel(logging.INFO)
     root_logger.propagate = False
-    
-    # Configure Uvicorn loggers specifically
+
     uvicorn_loggers = [
         logging.getLogger("uvicorn"),
         logging.getLogger("uvicorn.access"),

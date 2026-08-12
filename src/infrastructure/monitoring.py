@@ -81,13 +81,11 @@ def before_send_filter(event: dict[str, Any], hint: dict[str, Any]) -> dict[str,
     if "exception" in event:
         exceptions = event.get("exception", {}).get("values", [])
         for exception in exceptions:
-            # Check if it's an HTTPException with 401 status
             if exception.get("type") == "HTTPException":
                 mechanism = exception.get("mechanism", {})
                 if mechanism.get("data", {}).get("status_code") == 401:
                     return None
 
-    # Also check response status code in tags
     if "tags" in event:
         tags = event.get("tags", [])
         for tag in tags:
@@ -98,13 +96,11 @@ def before_send_filter(event: dict[str, Any], hint: dict[str, Any]) -> dict[str,
                 if tag.get("response.status_code") == 401:
                     return None
 
-    # Check in context data
     if "contexts" in event:
         response_context = event.get("contexts", {}).get("response", {})
         if response_context.get("status_code") == 401:
             return None
 
-    # Check HTTP exception context
     if "contexts" in event:
         http_exception = event.get("contexts", {}).get("http_exception", {})
         if http_exception.get("status_code") == 401:

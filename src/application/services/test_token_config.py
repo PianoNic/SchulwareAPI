@@ -559,11 +559,11 @@ def get_mock_absence_notice_status() -> list[dict[str, Any]]:
 
 def get_mock_notifications() -> list[dict[str, Any]]:
     """Generate mock push notifications (NotificationDto is empty, so flexible structure)"""
-    return []  # NotificationDto is an empty class, returns empty list
+    return []
 
 def get_mock_topics() -> list[dict[str, Any]]:
     """Generate mock notification topics (TopicDto is empty, so flexible structure)"""
-    return []  # TopicDto is an empty class, returns empty list
+    return []
 
 def get_mock_lateness() -> list[dict[str, Any]]:
     """Generate mock lateness records matching LatenessDto"""
@@ -662,20 +662,20 @@ def get_mock_data(data_type: str, **kwargs) -> Any | None:
     Note: Most endpoints return list[DTO], but user_info returns a single Dict
     """
     data_generators = {
-        "user_info": get_mock_user_info,  # Returns Dict (single UserInfoDto)
-        "events": lambda: get_mock_events(kwargs.get("min_date"), kwargs.get("max_date")),  # Returns list[AgendaDto]
-        "grades": get_mock_grades,  # Returns list[GradeDto]
-        "absences": get_mock_absences,  # Returns list[AbsenceDto]
-        "timetable": get_mock_timetable,  # Returns list[AgendaDto]
-        "documents": get_mock_documents,  # Returns list[Dict] (no specific DTO)
-        "settings": get_mock_settings,  # Returns list[SettingDto]
-        "exams": get_mock_exams,  # Returns list[ExamDto]
-        "absencenotices": get_mock_absence_notices,  # Returns list[AbsenceNoticeDto]
-        "absencenoticestatus": get_mock_absence_notice_status,  # Returns list[AbsenceNoticeStatusDto]
-        "notifications": get_mock_notifications,  # Returns List (empty - NotificationDto is empty)
-        "topics": get_mock_topics,  # Returns List (empty - TopicDto is empty)
-        "lateness": get_mock_lateness,  # Returns list[LatenessDto]
-        "cockpitreport": lambda: get_mock_cockpit_report(kwargs.get("report_id", 1)),  # Returns HTML string
+        "user_info": get_mock_user_info,
+        "events": lambda: get_mock_events(kwargs.get("min_date"), kwargs.get("max_date")),
+        "grades": get_mock_grades,
+        "absences": get_mock_absences,
+        "timetable": get_mock_timetable,
+        "documents": get_mock_documents,
+        "settings": get_mock_settings,
+        "exams": get_mock_exams,
+        "absencenotices": get_mock_absence_notices,
+        "absencenoticestatus": get_mock_absence_notice_status,
+        "notifications": get_mock_notifications,
+        "topics": get_mock_topics,
+        "lateness": get_mock_lateness,
+        "cockpitreport": lambda: get_mock_cockpit_report(kwargs.get("report_id", 1)),
     }
 
     generator = data_generators.get(data_type)

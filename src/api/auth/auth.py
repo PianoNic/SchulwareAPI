@@ -159,7 +159,6 @@ def validate_state_parameter(expected_state: str, received_state: str | None) ->
         logger.info("Note: State validation skipped - no state received")
         return False
 
-    # Direct match - ideal case
     if received_state == expected_state:
         logger.info("State validation passed (direct match).")
         return True

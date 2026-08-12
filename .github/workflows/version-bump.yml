@@ -72,7 +72,6 @@ jobs:
             # Only update the version, leave environment unchanged
             sed -i "s/^APP_VERSION=.*/APP_VERSION=$NEW_VERSION/" application.properties
           else
-            # Create new file with default values if it doesn't exist
             echo "APP_VERSION=$NEW_VERSION" > application.properties
             echo "APP_ENVIRONMENT=development" >> application.properties
           fi

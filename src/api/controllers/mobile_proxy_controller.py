@@ -29,19 +29,13 @@ router = APIRouter(prefix="/api/mobile", tags=["Mobile Proxy"])
 class MobileProxyController:
     mediator: Mediator = Depends(get_mediator)
 
-    # === User Info ===
-
     @router.get("/userInfo", dependencies=[Depends(security)], response_model=UserInfoDto)
     async def get_user_info(self, token: str = Depends(get_current_token), base_url: str = Depends(get_schulnetz_base_url)):
         return await self.mediator.send(ProxyMobileRestQuery(token, "me", "GET", base_url=base_url))
 
-    # === Grades ===
-
     @router.get("/grades", dependencies=[Depends(security)], response_model=list[GradeDto])
     async def get_grades(self, token: str = Depends(get_current_token), base_url: str = Depends(get_schulnetz_base_url)):
         return await self.mediator.send(ProxyMobileRestQuery(token, "me/grades", "GET", base_url=base_url))
-
-    # === Events / Timetable ===
 
     @router.get("/events", dependencies=[Depends(security)], response_model=list[EventDto])
     async def get_events(
@@ -65,13 +59,9 @@ class MobileProxyController:
         query_params = [("min_date", min_date), ("max_date", max_date)]
         return await self.mediator.send(ProxyMobileRestQuery(token, "me/events", "GET", base_url=base_url, query_params=query_params))
 
-    # === Exams ===
-
     @router.get("/exams", dependencies=[Depends(security)], response_model=list[ExamDto])
     async def get_exams(self, token: str = Depends(get_current_token), base_url: str = Depends(get_schulnetz_base_url)):
         return await self.mediator.send(ProxyMobileRestQuery(token, "me/exams", "GET", base_url=base_url))
-
-    # === Absences ===
 
     @router.get("/absences", dependencies=[Depends(security)], response_model=list[AbsenceDto])
     async def get_absences(self, token: str = Depends(get_current_token), base_url: str = Depends(get_schulnetz_base_url)):
@@ -89,19 +79,13 @@ class MobileProxyController:
     async def get_absences_confirmed(self, token: str = Depends(get_current_token), base_url: str = Depends(get_schulnetz_base_url)):
         return await self.mediator.send(ProxyMobileRestQuery(token, "me/absencesAndLateness/isAlreadyConfirmed", "GET", base_url=base_url))
 
-    # === Lateness ===
-
     @router.get("/lateness", dependencies=[Depends(security)], response_model=list[LatenessDto])
     async def get_lateness(self, token: str = Depends(get_current_token), base_url: str = Depends(get_schulnetz_base_url)):
         return await self.mediator.send(ProxyMobileRestQuery(token, "me/lateness", "GET", base_url=base_url))
 
-    # === Vacations ===
-
     @router.get("/vacations", dependencies=[Depends(security)], response_model=list[VacationDto])
     async def get_vacations(self, token: str = Depends(get_current_token), base_url: str = Depends(get_schulnetz_base_url)):
         return await self.mediator.send(ProxyMobileRestQuery(token, "me/vacations", "GET", base_url=base_url))
-
-    # === Notes ===
 
     @router.get("/homework", dependencies=[Depends(security)], response_model=list[HomeworkDto])
     async def get_homework(self, token: str = Depends(get_current_token), base_url: str = Depends(get_schulnetz_base_url)):
@@ -111,8 +95,6 @@ class MobileProxyController:
     async def get_objectives(self, token: str = Depends(get_current_token), base_url: str = Depends(get_schulnetz_base_url)):
         return await self.mediator.send(ProxyMobileRestQuery(token, "me/notes/objectives", "GET", base_url=base_url))
 
-    # === Notifications ===
-
     @router.get("/notifications", dependencies=[Depends(security)], response_model=list[NotificationDto])
     async def get_notifications(self, token: str = Depends(get_current_token), base_url: str = Depends(get_schulnetz_base_url)):
         return await self.mediator.send(ProxyMobileRestQuery(token, "me/notifications/push", "GET", base_url=base_url))
@@ -120,8 +102,6 @@ class MobileProxyController:
     @router.get("/topics", dependencies=[Depends(security)], response_model=list[TopicDto])
     async def get_topics(self, token: str = Depends(get_current_token), base_url: str = Depends(get_schulnetz_base_url)):
         return await self.mediator.send(ProxyMobileRestQuery(token, "me/notifications/topics", "GET", base_url=base_url))
-
-    # === Config ===
 
     @router.get("/settings", dependencies=[Depends(security)], response_model=list[SettingDto])
     async def get_settings(self, token: str = Depends(get_current_token), base_url: str = Depends(get_schulnetz_base_url)):
@@ -134,8 +114,6 @@ class MobileProxyController:
     @router.get("/filecategories", dependencies=[Depends(security)])
     async def get_file_categories(self, token: str = Depends(get_current_token), base_url: str = Depends(get_schulnetz_base_url)):
         return await self.mediator.send(ProxyMobileRestQuery(token, "config/filestoreCategories", "GET", base_url=base_url))
-
-    # === Student ID Card ===
 
     @router.get("/studentidcard/{report_id}", dependencies=[Depends(security)], response_model=StudentIdCardDto)
     async def get_student_id_card(self, report_id: int, token: str = Depends(get_current_token), base_url: str = Depends(get_schulnetz_base_url)):
