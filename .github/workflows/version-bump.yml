@@ -69,7 +69,6 @@ jobs:
           echo "Updating version to: $NEW_VERSION"
 
           if [ -f application.properties ]; then
-            # Only update the version, leave environment unchanged
             sed -i "s/^APP_VERSION=.*/APP_VERSION=$NEW_VERSION/" application.properties
           else
             echo "APP_VERSION=$NEW_VERSION" > application.properties
