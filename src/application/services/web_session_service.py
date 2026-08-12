@@ -372,7 +372,6 @@ async def save_semid(
             return False
 
 
-# Page ID constants for known Schulnetz pages
 PAGE_IDS = {
     "home": "1",
     "absences": "21111",

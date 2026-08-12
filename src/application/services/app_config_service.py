@@ -10,7 +10,6 @@ class AppConfigService:
     
     def _load_properties(self):
         """Load properties from application.properties file"""
-        # Look for application.properties in project root
         project_root = Path(__file__).parent.parent.parent.parent
         properties_file = project_root / "application.properties"
         
@@ -46,5 +45,4 @@ class AppConfigService:
         """Get any configuration value"""
         return self._config.get(key, default)
 
-# Global instance
 app_config = AppConfigService()

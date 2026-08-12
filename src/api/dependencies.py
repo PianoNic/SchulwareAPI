@@ -34,19 +34,12 @@ from src.application.queries.validate_web_session_query import (
 def build_mediator() -> Mediator:
     m = Mediator()
 
-    # Commands
     m.register(LoginCommand, LoginHandler)
 
-    # Queries
     m.register(GetAppInfoQuery, GetAppInfoHandler)
     m.register(ProxyMobileRestQuery, ProxyMobileRestHandler)
     m.register(ScrapeWebPageQuery, ScrapeWebPageHandler)
     m.register(ValidateWebSessionQuery, ValidateWebSessionHandler)
-
-    # Pipeline behaviors will be added here in the next step
-    # m.add_behavior(LoggingBehavior)
-    # m.add_behavior(SentryBreadcrumbBehavior)
-    # m.add_behavior(PerformanceBehavior)
 
     return m
 

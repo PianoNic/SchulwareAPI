@@ -25,7 +25,6 @@ setup_colored_logging()
 
 load_env()
 
-# Initialize Sentry/GlitchTip monitoring
 initialize_sentry(
     dsn=os.getenv("SENTRY_DSN"),
     environment=app_config.get_environment(),
@@ -76,7 +75,6 @@ app = FastAPI(
     generate_unique_id_function=_custom_operation_id,
 )
 
-# Static assets (icon.svg, manifest, favicons)
 _ASSETS_DIR = Path(__file__).resolve().parents[2] / "assets"
 app.mount("/assets", StaticFiles(directory=_ASSETS_DIR), name="assets")
 
@@ -88,15 +86,12 @@ def swagger_ui():
         swagger_favicon_url="/assets/icon.svg",
     )
 
-# Sentry middleware for enhanced error tracking
 app.add_middleware(SentryMiddleware)
 app.add_middleware(SentryAsyncContextMiddleware)
 
-# Rate limiting
 app.state.limiter = shared_limiter
 app.add_exception_handler(RateLimitExceeded, shared_rate_limit_exceeded_handler)
 
-# Routers
 app.include_router(app_controller.router)
 app.include_router(auth_controller.router)
 app.include_router(mobile_proxy_controller.router)

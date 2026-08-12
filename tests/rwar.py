@@ -1,5 +1,3 @@
-#https://claude.ai/chat/f211177f-a2bb-452f-8696-61f6ae798675
-
 import httpx
 from bs4 import BeautifulSoup
 from datetime import datetime, time

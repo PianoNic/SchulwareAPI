@@ -31,8 +31,7 @@ jobs:
         run: |
           VERSION="${{ steps.get_version.outputs.VERSION }}"
           echo "Target version: $VERSION"
-          
-          # Check current version in application.properties
+
           CURRENT_VERSION=""
           if [ -f application.properties ]; then
             CURRENT_VERSION=$(grep "^APP_VERSION=" application.properties | cut -d'=' -f2)
@@ -40,8 +39,7 @@ jobs:
           else
             echo "application.properties does not exist"
           fi
-          
-          # Skip if versions match
+
           if [ "$CURRENT_VERSION" = "$VERSION" ]; then
             echo "Version is already $VERSION, skipping update"
             exit 0
@@ -59,8 +57,7 @@ jobs:
           
           echo "Updated application.properties:"
           cat application.properties
-          
-          # Check if there are any changes to commit
+
           if git diff --quiet application.properties; then
             echo "No changes to commit"
             exit 0
@@ -92,7 +89,6 @@ jobs:
           VERSION="${{ steps.get_version.outputs.VERSION }}"
           echo "Target version: $VERSION"
 
-          # Check current values in application.properties
           CURRENT_VERSION=""
           CURRENT_ENV=""
           if [ -f application.properties ]; then
@@ -102,7 +98,6 @@ jobs:
             echo "Current environment: $CURRENT_ENV"
           fi
 
-          # Only update if needed
           if [ "$CURRENT_VERSION" = "$VERSION" ] && [ "$CURRENT_ENV" = "production" ]; then
             echo "application.properties already has correct version ($VERSION) and environment (production)"
           else
