@@ -13,6 +13,7 @@ back to credentials (when provided), or raises `NeedsCredentials`.
 """
 
 import asyncio
+import time
 from dataclasses import dataclass
 
 from entrance import LoginFailed, MfaRequired, NeedsCredentials
@@ -26,6 +27,13 @@ from src.application.services.web_session_service import capture_web_session, di
 from src.infrastructure.logging_config import get_logger
 
 logger = get_logger("login_command")
+
+TOTP_PERIOD = 30
+
+
+def seconds_to_next_totp_window(now: float | None = None) -> float:
+    now = time.time() if now is None else now
+    return TOTP_PERIOD - (now % TOTP_PERIOD) + 1
 
 
 @dataclass
@@ -150,13 +158,25 @@ class LoginHandler(ICommandHandler[LoginCommand, LoginResponseDto]):
         `cookies` is always an inline list or None — never a file on disk.
         With ms_redirect=True the raw Microsoft → provider callback URL is returned
         (incl. session_state) without consuming the code."""
-        return await asyncio.to_thread(
-            ms_login,
-            authorize_url,
-            username=command.email,
-            password=command.password,
-            totp_secret=command.totp_secret,
-            totp_code=command.totp_code,
-            cookies=cookies,
-            ms_redirect=ms_redirect,
-        )
+        def attempt():
+            return asyncio.to_thread(
+                ms_login,
+                authorize_url,
+                username=command.email,
+                password=command.password,
+                totp_secret=command.totp_secret,
+                totp_code=command.totp_code,
+                cookies=cookies,
+                ms_redirect=ms_redirect,
+            )
+
+        try:
+            return await attempt()
+        except MfaRequired as ex:
+            # Microsoft rejects a code already used in the current window; a secret can mint the next one.
+            if not command.totp_secret or "DuplicateCodeEntered" not in str(ex):
+                raise
+            wait = seconds_to_next_totp_window()
+            logger.info("TOTP code already used in this window; retrying in %.0fs", wait)
+            await asyncio.sleep(wait)
+            return await attempt()
