@@ -7,6 +7,8 @@ fresh tokens, the web session, and the rotated `session_cookies` to persist —
 storing nothing itself. Input in, output out.
 """
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -46,3 +48,9 @@ class LoginResponseDto(BaseModel):
         description="Rotated Microsoft session cookies. The caller MUST persist these and pass them back as session_cookies on the next call.",
     )
     message: str | None = None
+
+
+class LoginMethodDto(BaseModel):
+    """How a Schulnetz school signs users in."""
+
+    method: Literal["microsoft", "native"] = Field(description="`microsoft`: Entra SSO (sign in with a Microsoft session or credentials). `native`: Schulnetz's own login form.")

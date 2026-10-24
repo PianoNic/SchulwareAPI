@@ -2,11 +2,12 @@ from fastapi import APIRouter, Depends, Request
 from mediatorx import Mediator
 
 from src.api.controller import controller
-from src.api.dependencies import get_mediator
+from src.api.dependencies import get_mediator, get_schulnetz_base_url
 from src.api.rate_limit import is_service_caller, require_service_key, shared_limiter
 from src.api.url_guard import validate_base_url
 from src.application.commands.refresh_token_command import LoginCommand
-from src.application.dtos.refresh_dtos import LoginRequestDto, LoginResponseDto
+from src.application.dtos.refresh_dtos import LoginMethodDto, LoginRequestDto, LoginResponseDto
+from src.application.queries.detect_login_method_query import DetectLoginMethodQuery
 
 router = APIRouter(prefix="/api/authenticate", tags=["Auth"])
 
@@ -37,3 +38,9 @@ class AuthController:
             totp_code=body.totp_code,
             user_agent=body.user_agent,
         ))
+
+    @router.get("/login-method", response_model=LoginMethodDto)
+    @shared_limiter.limit("30/minute", exempt_when=is_service_caller)
+    async def login_method(self, request: Request, base_url: str = Depends(get_schulnetz_base_url)):
+        """Which sign-in the school uses, so a client can show a Microsoft account picker or a credentials form."""
+        return await self.mediator.send(DetectLoginMethodQuery(base_url=base_url))

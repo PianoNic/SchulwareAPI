@@ -14,6 +14,10 @@ from src.application.commands.refresh_token_command import (
     LoginCommand,
     LoginHandler,
 )
+from src.application.queries.detect_login_method_query import (
+    DetectLoginMethodQuery,
+    DetectLoginMethodHandler,
+)
 from src.application.queries.get_app_info_query import (
     GetAppInfoQuery,
     GetAppInfoHandler,
@@ -36,6 +40,7 @@ def build_mediator() -> Mediator:
 
     m.register(LoginCommand, LoginHandler)
 
+    m.register(DetectLoginMethodQuery, DetectLoginMethodHandler)
     m.register(GetAppInfoQuery, GetAppInfoHandler)
     m.register(ProxyMobileRestQuery, ProxyMobileRestHandler)
     m.register(ScrapeWebPageQuery, ScrapeWebPageHandler)
