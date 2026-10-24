@@ -21,6 +21,7 @@ from mediatorx import ICommand, ICommandHandler
 
 from src.api.auth.auth import exchange_code_for_tokens, generate_oauth_url
 from src.application.dtos.refresh_dtos import LoginResponseDto
+from src.application.services.native_login_service import NativeLoginFailed, detect_login_mode, native_mobile_tokens, native_web_session, totp_code_for
 from src.application.services.web_session_service import capture_web_session, discover_web_oauth
 from src.infrastructure.logging_config import get_logger
 
@@ -45,6 +46,9 @@ class LoginHandler(ICommandHandler[LoginCommand, LoginResponseDto]):
 
     async def handle(self, command: LoginCommand) -> LoginResponseDto:
         base = command.schulnetz_base_url.rstrip("/")
+        if command.email and command.password and await detect_login_mode(base, command.user_agent) == "native":
+            return await self._native_login(base, command)
+
         cookies = command.session_cookies or None
         if cookies:
             logger.info("Login: replaying %d stored cookies", len(cookies))
@@ -108,6 +112,28 @@ class LoginHandler(ICommandHandler[LoginCommand, LoginResponseDto]):
         except Exception as ex:
             logger.exception("Login failed")
             return LoginResponseDto(success=False, message=f"Login failed: {ex}")
+
+    async def _native_login(self, base: str, command: LoginCommand) -> LoginResponseDto:
+        """Schulnetz's own login form instead of Microsoft: web session first, then mobile tokens."""
+        try:
+            cookies, info = await native_web_session(base, command.email, command.password, totp_code_for(command.totp_secret, command.totp_code), command.user_agent)
+            access_token, refresh_token = await native_mobile_tokens(base, command.email, command.password, totp_code_for(command.totp_secret, command.totp_code), command.user_agent)
+        except NativeLoginFailed as ex:
+            return LoginResponseDto(success=False, message=f"Login failed: {ex}")
+        except Exception as ex:
+            logger.exception("Native login failed")
+            return LoginResponseDto(success=False, message=f"Login failed: {ex}")
+
+        logger.info("native login: php=%s id=%s transid=%s token=%s", "PHPSESSID" in cookies, info.get("id"), info.get("transid"), bool(access_token))
+        return LoginResponseDto(
+            success=True,
+            access_token=access_token,
+            refresh_token=refresh_token,
+            session_id=cookies["PHPSESSID"],
+            web_session_user_id=info.get("id"),
+            web_session_trans_id=info.get("transid"),
+            message="Signed in with the Schulnetz login",
+        )
 
     async def _login(self, authorize_url: str, command: LoginCommand, cookies, ms_redirect: bool = False):
         """Run the synchronous ms-entrance login off the event loop. Seeds the
