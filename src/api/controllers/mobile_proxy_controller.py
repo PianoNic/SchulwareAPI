@@ -10,6 +10,10 @@ from src.api.dependencies import get_mediator, get_schulnetz_base_url
 from src.application.dtos.mobile.absence_dto import AbsenceDto
 from src.application.dtos.mobile.absencenotice_dto import AbsenceNoticeDto
 from src.application.dtos.mobile.absencenoticestatus_dto import AbsenceNoticeStatusDto
+from src.application.dtos.mobile.certificate_grade_dto import CertificateGradeDto
+from src.application.dtos.mobile.course_dto import CourseDto
+from src.application.dtos.mobile.filestore_dto import FilestoreEntryDto
+from src.application.dtos.mobile.push_token_dto import PushTokenRequestDto, PushTokenResultDto
 from src.application.dtos.mobile.event_dto import EventDto
 from src.application.dtos.mobile.exam_dto import ExamDto
 from src.application.dtos.mobile.grade_dto import GradeDto
@@ -114,6 +118,26 @@ class MobileProxyController:
     @router.get("/filecategories", dependencies=[Depends(security)])
     async def get_file_categories(self, token: str = Depends(get_current_token), base_url: str = Depends(get_schulnetz_base_url)):
         return await self.mediator.send(ProxyMobileRestQuery(token, "config/filestoreCategories", "GET", base_url=base_url))
+
+    @router.get("/filestore", dependencies=[Depends(security)], response_model=list[FilestoreEntryDto])
+    async def get_filestore(self, token: str = Depends(get_current_token), base_url: str = Depends(get_schulnetz_base_url)):
+        return await self.mediator.send(ProxyMobileRestQuery(token, "me/filestore", "GET", base_url=base_url))
+
+    @router.get("/certificates", dependencies=[Depends(security)], response_model=list[CertificateGradeDto])
+    async def get_certificate_grades(self, token: str = Depends(get_current_token), base_url: str = Depends(get_schulnetz_base_url)):
+        return await self.mediator.send(ProxyMobileRestQuery(token, "me/certificates/grades", "GET", base_url=base_url))
+
+    @router.get("/courses", dependencies=[Depends(security)], response_model=list[CourseDto])
+    async def get_courses(self, token: str = Depends(get_current_token), base_url: str = Depends(get_schulnetz_base_url)):
+        return await self.mediator.send(ProxyMobileRestQuery(token, "me/courses", "GET", base_url=base_url))
+
+    @router.post("/notifications/token", dependencies=[Depends(security)], response_model=PushTokenResultDto)
+    async def register_push_token(self, body: PushTokenRequestDto, token: str = Depends(get_current_token), base_url: str = Depends(get_schulnetz_base_url)):
+        return await self.mediator.send(ProxyMobileRestQuery(token, "me/notifications/token", "POST", base_url=base_url, body=body.model_dump()))
+
+    @router.delete("/notifications/token/{device_id}", dependencies=[Depends(security)], response_model=PushTokenResultDto)
+    async def remove_push_token(self, device_id: str, token: str = Depends(get_current_token), base_url: str = Depends(get_schulnetz_base_url)):
+        return await self.mediator.send(ProxyMobileRestQuery(token, f"me/notifications/token/{device_id}", "DELETE", base_url=base_url))
 
     @router.get("/studentidcard/{report_id}", dependencies=[Depends(security)], response_model=StudentIdCardDto)
     async def get_student_id_card(self, report_id: int, token: str = Depends(get_current_token), base_url: str = Depends(get_schulnetz_base_url)):
