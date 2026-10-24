@@ -3,7 +3,7 @@ from mediatorx import Mediator
 
 from src.api.controller import controller
 from src.api.dependencies import get_mediator
-from src.api.rate_limit import shared_limiter
+from src.api.rate_limit import is_service_caller, require_service_key, shared_limiter
 from src.api.url_guard import validate_base_url
 from src.application.commands.refresh_token_command import LoginCommand
 from src.application.dtos.refresh_dtos import LoginRequestDto, LoginResponseDto
@@ -15,8 +15,8 @@ router = APIRouter(prefix="/api/authenticate", tags=["Auth"])
 class AuthController:
     mediator: Mediator = Depends(get_mediator)
 
-    @router.post("/login", response_model=LoginResponseDto)
-    @shared_limiter.limit("5/minute")
+    @router.post("/login", response_model=LoginResponseDto, dependencies=[Depends(require_service_key)])
+    @shared_limiter.limit("5/minute", exempt_when=is_service_caller)
     async def login(self, request: Request, body: LoginRequestDto):
         """Unified Schulnetz auth — one endpoint for every sign-in path.
 

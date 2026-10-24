@@ -3,7 +3,7 @@ from mediatorx import Mediator
 
 from src.api.controller import controller
 from src.api.dependencies import get_mediator, get_schulnetz_base_url
-from src.api.rate_limit import shared_limiter
+from src.api.rate_limit import is_service_caller, shared_limiter
 from src.application.dtos.web_session_dtos import (
     WebDownloadRequestDto,
     WebScrapeRequestDto,
@@ -23,7 +23,7 @@ class WebSessionController:
     mediator: Mediator = Depends(get_mediator)
 
     @router.post("/scrape", response_model=WebScrapeResponseDto)
-    @shared_limiter.limit("30/minute")
+    @shared_limiter.limit("30/minute", exempt_when=is_service_caller)
     async def scrape(
         self,
         request: Request,
@@ -38,7 +38,7 @@ class WebSessionController:
         return await self.mediator.send(ScrapeWebPageQuery(body, base_url=base_url))
 
     @router.post("/download")
-    @shared_limiter.limit("30/minute")
+    @shared_limiter.limit("30/minute", exempt_when=is_service_caller)
     async def download(
         self,
         request: Request,
@@ -63,7 +63,7 @@ class WebSessionController:
         )
 
     @router.post("/validate")
-    @shared_limiter.limit("10/minute")
+    @shared_limiter.limit("10/minute", exempt_when=is_service_caller)
     async def validate(
         self,
         request: Request,

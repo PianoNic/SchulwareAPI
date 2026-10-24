@@ -7,6 +7,7 @@ from fastapi import HTTPException, Response
 from fastapi.responses import JSONResponse
 from mediatorx import IQuery, IQueryHandler
 
+from src.application.services.app_config_service import app_config
 from src.application.services.test_token_config import get_mock_data, is_test_token
 from src.infrastructure.logging_config import get_logger
 from src.infrastructure.monitoring import add_breadcrumb, capture_exception, monitor_performance
@@ -46,8 +47,8 @@ class ProxyMobileRestHandler(IQueryHandler[ProxyMobileRestQuery, Any]):
         target_url_path = query.target_url_path
         query_params = query.query_params
 
-        # Test-token shortcut: return mock data.
-        if is_test_token(token):
+        # Test-token shortcut: return mock data (never in production).
+        if not app_config.is_production() and is_test_token(token):
             logger.info(f"Test token detected - returning mock data for: {target_url_path}")
             normalized_path = f"/rest/v1/{target_url_path.lstrip('/')}"
             data_type = _ENDPOINT_MAP.get(normalized_path)
