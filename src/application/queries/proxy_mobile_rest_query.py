@@ -35,6 +35,7 @@ class ProxyMobileRestQuery(IQuery[Any]):
     method: str
     base_url: str = ""
     query_params: list[tuple] | None = None
+    body: Any = None
 
 
 class ProxyMobileRestHandler(IQueryHandler[ProxyMobileRestQuery, Any]):
@@ -87,7 +88,7 @@ class ProxyMobileRestHandler(IQueryHandler[ProxyMobileRestQuery, Any]):
                     target_url,
                     headers=request_headers,
                     params=params_to_forward,
-                    content=None,
+                    json=query.body,
                 )
             response.raise_for_status()
             content_type = response.headers.get("content-type", "")

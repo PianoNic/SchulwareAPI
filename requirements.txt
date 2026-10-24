@@ -3,6 +3,7 @@ uvicorn==0.38.0
 httpx==0.28.1
 python-dotenv==1.2.1
 ms-entrance==1.4.0
+firebase-messaging==0.4.5
 python-multipart==0.0.20
 colorlog==6.10.1
 beautifulsoup4==4.14.2
