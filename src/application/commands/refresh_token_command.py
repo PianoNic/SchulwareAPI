@@ -46,9 +46,18 @@ class LoginHandler(ICommandHandler[LoginCommand, LoginResponseDto]):
 
     async def handle(self, command: LoginCommand) -> LoginResponseDto:
         base = command.schulnetz_base_url.rstrip("/")
-        if command.email and command.password and await detect_login_mode(base, command.user_agent) == "native":
-            return await self._native_login(base, command)
+        if not (command.email and command.password) or await detect_login_mode(base, command.user_agent) != "native":
+            return await self._microsoft_login(base, command)
 
+        # A page can offer both its own form and Microsoft sign-in, so a failed native
+        # attempt falls back to Microsoft; the native error is reported if both fail.
+        native = await self._native_login(base, command)
+        if native.success:
+            return native
+        microsoft = await self._microsoft_login(base, command)
+        return microsoft if microsoft.success else native
+
+    async def _microsoft_login(self, base: str, command: LoginCommand) -> LoginResponseDto:
         cookies = command.session_cookies or None
         if cookies:
             logger.info("Login: replaying %d stored cookies", len(cookies))
