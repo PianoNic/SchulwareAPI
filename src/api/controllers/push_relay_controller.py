@@ -36,12 +36,12 @@ class PushRelayController:
             raise HTTPException(status_code=400, detail=str(ex))
         return {"started": started}
 
-    @router.get("/listen/{listener_id}", response_model=PushListenStatusDto, dependencies=[Depends(require_relay_key)])
+    @router.get("/listen/{listener_id}", response_model=PushListenStatusDto, operation_id="push-listen-status", dependencies=[Depends(require_relay_key)])
     async def status(self, listener_id: str):
         current = push_relay.status(listener_id)
         return PushListenStatusDto(running=False) if current is None else PushListenStatusDto(**current)
 
-    @router.delete("/listen/{listener_id}", status_code=204, dependencies=[Depends(require_relay_key)])
+    @router.delete("/listen/{listener_id}", status_code=204, operation_id="push-listen-stop", dependencies=[Depends(require_relay_key)])
     async def stop(self, listener_id: str):
         await push_relay.stop(listener_id)
         return Response(status_code=204)
