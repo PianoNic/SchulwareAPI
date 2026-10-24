@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.openapi.utils import get_openapi
 from fastapi.routing import APIRoute
@@ -16,7 +16,7 @@ from src.api.controllers import (
     web_session_controller,
 )
 from src.api.middleware.sentry_middleware import SentryMiddleware, SentryAsyncContextMiddleware
-from src.api.rate_limit import shared_limiter, shared_rate_limit_exceeded_handler
+from src.api.rate_limit import ServiceCallerMiddleware, limit_per_token, shared_limiter, shared_rate_limit_exceeded_handler
 from src.application.services.app_config_service import app_config
 from src.application.services.env_service import load_env
 from src.infrastructure.logging_config import setup_colored_logging
@@ -89,13 +89,14 @@ def swagger_ui():
 
 app.add_middleware(SentryMiddleware)
 app.add_middleware(SentryAsyncContextMiddleware)
+app.add_middleware(ServiceCallerMiddleware)
 
 app.state.limiter = shared_limiter
 app.add_exception_handler(RateLimitExceeded, shared_rate_limit_exceeded_handler)
 
 app.include_router(app_controller.router)
 app.include_router(auth_controller.router)
-app.include_router(mobile_proxy_controller.router)
+app.include_router(mobile_proxy_controller.router, dependencies=[Depends(limit_per_token)])
 app.include_router(push_relay_controller.router)
 app.include_router(web_session_controller.router)
 
