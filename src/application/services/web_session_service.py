@@ -15,6 +15,11 @@ WEB_HEADERS = {
     "Sec-Fetch-Mode": "navigate",
 }
 
+def _is_login_page(url: str) -> bool:
+    """A dead session lands on Microsoft's sign-in or, for schools with their own login, on loginto.php."""
+    return "login.microsoftonline.com" in url or "/loginto.php" in url
+
+
 async def discover_web_oauth(schulnetz_base_url: str) -> tuple[str, dict[str, str]]:
     """Start the OAuth flow from the school root, like a browser.
 
@@ -176,8 +181,8 @@ async def scrape_page(schulnetz_base_url: str, cookies: dict[str, str], pageid: 
             response = await client.get(url, params=params)
 
             if response.status_code == 200:
-                if "login.microsoftonline.com" in str(response.url):
-                    logger.warning("Session expired — redirected to Microsoft login")
+                if _is_login_page(str(response.url)):
+                    logger.warning("Session expired — redirected to the login page")
                     return None
                 return response.text
 
@@ -229,7 +234,7 @@ async def download_file(
     async with httpx.AsyncClient(headers=headers, cookies=cookies, follow_redirects=True, timeout=60.0) as client:
         try:
             response = await client.get(url)
-            if response.status_code != 200 or "login.microsoftonline.com" in str(response.url):
+            if response.status_code != 200 or _is_login_page(str(response.url)):
                 logger.warning(f"Download failed (status {response.status_code}) for {url}")
                 return None
 
