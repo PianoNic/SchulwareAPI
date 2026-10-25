@@ -28,6 +28,20 @@ from src.infrastructure.logging_config import get_logger
 
 logger = get_logger("login_command")
 
+
+def _usable_cookies(cookies: list | None) -> list | None:
+    """Drop Microsoft's transient per-request `esctx-<id>` context cookies.
+
+    A WebView accumulates them across the sign-in journey; replaying them makes
+    Entra treat the session as mid-flow and refuse the silent SSO. A fresh
+    headless login never keeps them, so stripping them makes a captured jar
+    behave like a clean one. The durable `esctx` cookie (no suffix) stays.
+    """
+    if not cookies:
+        return cookies
+    return [c for c in cookies if not str(c.get("name", "")).startswith("esctx-")]
+
+
 TOTP_PERIOD = 30
 
 
@@ -66,7 +80,7 @@ class LoginHandler(ICommandHandler[LoginCommand, LoginResponseDto]):
         return microsoft if microsoft.success else native
 
     async def _microsoft_login(self, base: str, command: LoginCommand) -> LoginResponseDto:
-        cookies = command.session_cookies or None
+        cookies = _usable_cookies(command.session_cookies) or None
         if cookies:
             logger.info("Login: replaying %d stored cookies", len(cookies))
 
