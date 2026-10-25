@@ -93,7 +93,7 @@ docker compose up -d
 The API will be available at [http://localhost:8000](http://localhost:8000).
 
 ## 📜 License
-This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
+This project is licensed under the PolyForm Noncommercial License 1.0.0. See [LICENSE](LICENSE) for details.
 
 ---
 <p align="center">Made with ❤️ by <a href="https://github.com/PianoNic">PianoNic</a></p>
