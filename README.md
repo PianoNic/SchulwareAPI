@@ -24,11 +24,11 @@ SchulwareAPI is a unified API designed for Schulnetz systems, simplifying data a
 - **Docker Ready**: Simple, containerized deployment.
   
 ## 🛠️ Compatibility
-This API has been tested on:
-- bbbaden
-- ~kanti baden~ (Still implementing php scraper)
+Works with any schulNetz instance. `GET /api/authenticate/login-method` tells how a school signs in:
 
-Schulnetz systems.
+- `microsoft`: Microsoft Entra sign-in, done headlessly with credentials or saved session cookies (tested on BBB Baden).
+- `native`: schulNetz's own login form with an optional 2FA PIN, done headlessly.
+- `browser`: any other sign-in, such as a cantonal login. The user signs in in a browser started with `/api/authenticate/browser/start`, and `/api/authenticate/browser/complete` exchanges the callback code for mobile tokens.
 
 ### Access the API
 API will be live at:
