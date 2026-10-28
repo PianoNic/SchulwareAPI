@@ -155,3 +155,9 @@ def test_loginto_counts_as_an_expired_session():
     assert _is_login_page(f"{BASE}/loginto.php?mode=0")
     assert _is_login_page("https://login.microsoftonline.com/x")
     assert not _is_login_page(f"{BASE}/index.php?pageid=21311")
+
+
+@pytest.mark.asyncio
+async def test_detects_a_school_with_another_sign_in_as_browser():
+    transport = httpx.MockTransport(lambda r: httpx.Response(200, text='<form><input name="userid"><input name="password"></form>'))
+    assert await native.detect_login_mode(BASE, transport=transport) == "browser"

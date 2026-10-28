@@ -6,7 +6,7 @@ from src.application.queries import detect_login_method_query as query
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("mode", ["microsoft", "native"])
+@pytest.mark.parametrize("mode", ["microsoft", "native", "browser"])
 async def test_reports_the_detected_method(monkeypatch, mode):
     seen = {}
 
