@@ -10,6 +10,14 @@ from mediatorx import Mediator
 
 from src.api.url_guard import validate_base_url
 
+from src.application.commands.browser_login_command import (
+    CompleteBrowserLoginCommand,
+    CompleteBrowserLoginHandler,
+    RefreshMobileTokenCommand,
+    RefreshMobileTokenHandler,
+    StartBrowserLoginCommand,
+    StartBrowserLoginHandler,
+)
 from src.application.commands.refresh_token_command import (
     LoginCommand,
     LoginHandler,
@@ -39,6 +47,9 @@ def build_mediator() -> Mediator:
     m = Mediator()
 
     m.register(LoginCommand, LoginHandler)
+    m.register(StartBrowserLoginCommand, StartBrowserLoginHandler)
+    m.register(CompleteBrowserLoginCommand, CompleteBrowserLoginHandler)
+    m.register(RefreshMobileTokenCommand, RefreshMobileTokenHandler)
 
     m.register(DetectLoginMethodQuery, DetectLoginMethodHandler)
     m.register(GetAppInfoQuery, GetAppInfoHandler)

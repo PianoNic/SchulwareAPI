@@ -53,4 +53,31 @@ class LoginResponseDto(BaseModel):
 class LoginMethodDto(BaseModel):
     """How a Schulnetz school signs users in."""
 
-    method: Literal["microsoft", "native"] = Field(description="`microsoft`: Entra SSO (sign in with a Microsoft session or credentials). `native`: Schulnetz's own login form.")
+    method: Literal["microsoft", "native", "browser"] = Field(description="`microsoft`: Entra SSO (sign in with a Microsoft session or credentials). `native`: Schulnetz's own login form. `browser`: any other sign-in (e.g. a cantonal login); the user signs in in a browser started with /api/authenticate/browser/start.")
+
+
+class BrowserLoginStartRequestDto(BaseModel):
+    schulnetz_base_url: str = Field(..., description="The Schulnetz instance base URL")
+
+
+class BrowserLoginStartDto(BaseModel):
+    """Open `auth_url` in a browser; sign-in ends on a URL starting with `callback_url` that carries `code` and this `state`."""
+
+    auth_url: str
+    callback_url: str
+    state: str
+    code_verifier: str
+    device_id: str
+
+
+class BrowserLoginCompleteRequestDto(BaseModel):
+    schulnetz_base_url: str
+    code: str = Field(..., description="The `code` from the callback URL")
+    code_verifier: str
+    device_id: str
+
+
+class MobileTokenRefreshRequestDto(BaseModel):
+    schulnetz_base_url: str
+    refresh_token: str
+    device_id: str

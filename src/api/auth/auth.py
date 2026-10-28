@@ -80,7 +80,7 @@ def extract_auth_code_from_url(url: str) -> tuple[str | None, str | None]:
         return None, None
 
 
-async def exchange_code_for_tokens(auth_code: str, code_verifier: str, base_url: str) -> tuple[str | None, str | None]:
+async def exchange_code_for_tokens(auth_code: str, code_verifier: str, base_url: str, device_id: str | None = None) -> tuple[str | None, str | None]:
     """
     Exchange authorization code for access and refresh tokens.
 
@@ -110,6 +110,8 @@ async def exchange_code_for_tokens(auth_code: str, code_verifier: str, base_url:
         "code_verifier": code_verifier,
         "client_id": SCHULNETZ_CLIENT_ID,
     }
+    if device_id:
+        token_data["device_id"] = device_id
 
     # Set headers for the token exchange request to match the working curl command exactly
     headers_for_token_exchange = {
@@ -151,6 +153,19 @@ async def exchange_code_for_tokens(auth_code: str, code_verifier: str, base_url:
         return None, None
     finally:
         await httpx_client.aclose()
+
+
+async def refresh_mobile_tokens(refresh_token: str, device_id: str, base_url: str) -> tuple[str | None, str | None, str | None]:
+    """Trade a refresh token for new mobile tokens. Returns (access_token, refresh_token, error); some schools refuse with `biometric_required`."""
+    async with httpx.AsyncClient(timeout=20) as client:
+        try:
+            response = await client.post(f"{base_url.rstrip('/')}/token.php", data={"grant_type": "refresh_token", "refresh_token": refresh_token, "client_id": SCHULNETZ_CLIENT_ID, "device_id": device_id})
+            body = response.json()
+        except (httpx.HTTPError, ValueError) as ex:
+            return None, None, str(ex)
+    if response.status_code != 200 or not body.get("access_token"):
+        return None, None, body.get("error") or f"HTTP {response.status_code}"
+    return body["access_token"], body.get("refresh_token") or refresh_token, None
 
 
 def validate_state_parameter(expected_state: str, received_state: str | None) -> bool:

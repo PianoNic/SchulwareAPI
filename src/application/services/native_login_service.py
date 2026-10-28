@@ -44,7 +44,7 @@ def _client(user_agent: str | None, transport: httpx.AsyncBaseTransport | None) 
 
 
 async def detect_login_mode(base_url: str, user_agent: str | None = None, transport: httpx.AsyncBaseTransport | None = None) -> str:
-    """'native' when authorize.php shows Schulnetz's own login form, otherwise 'microsoft'."""
+    """'microsoft' when sign-in goes through Microsoft Entra, 'native' when authorize.php shows Schulnetz's own login form, otherwise 'browser'."""
     auth = generate_oauth_url(base_url, auth_type="mobile")
     async with _client(user_agent, transport) as client:
         response = await client.get(auth["auth_url"])
@@ -55,7 +55,7 @@ async def detect_login_mode(base_url: str, user_agent: str | None = None, transp
             if MICROSOFT_HOST in location:
                 return "microsoft"
             response = await client.get(urljoin(str(response.url), location))
-    return "native" if _form_with(response.text, "passwort") is not None else "microsoft"
+    return "native" if _form_with(response.text, "passwort") is not None else "browser"
 
 
 async def native_mobile_tokens(base_url: str, email: str, password: str, totp: str | None, user_agent: str | None = None, transport: httpx.AsyncBaseTransport | None = None) -> tuple[str, str | None]:
