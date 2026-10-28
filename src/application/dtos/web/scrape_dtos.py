@@ -25,6 +25,7 @@ class CourseGradesDto(BaseModel):
     course_token: str | None = None  # course code, e.g. "GP-BM23d-ArAr" (matches the timetable's kurskuerzel)
     average: float | None = None     # 5.500 (Notendurchschnitt)
     confirmed: bool | None = None    # Bestätigt
+    semester: str | None = None      # semester label, e.g. "1. 25/26"
     exams: list[ExamGradeDto] = []
 
 

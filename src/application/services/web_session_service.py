@@ -145,7 +145,7 @@ def _extract_session_info(url: str, html: str) -> dict[str, str] | None:
 
     return info if info else None
 
-async def scrape_page(schulnetz_base_url: str, cookies: dict[str, str], pageid: str, session_id: str, transid: str, user_agent: str | None = None) -> str | None:
+async def scrape_page(schulnetz_base_url: str, cookies: dict[str, str], pageid: str, session_id: str, transid: str, user_agent: str | None = None, client: httpx.AsyncClient | None = None) -> str | None:
     """
     Fetch a Schulnetz page using stored session cookies.
 
@@ -176,22 +176,25 @@ async def scrape_page(schulnetz_base_url: str, cookies: dict[str, str], pageid: 
     if user_agent:
         headers["User-Agent"] = user_agent
 
-    async with httpx.AsyncClient(headers=headers, cookies=cookies, follow_redirects=True, timeout=30.0) as client:
-        try:
-            response = await client.get(url, params=params)
+    try:
+        if client is not None:
+            response = await client.get(url, params=params, headers=headers)
+        else:
+            async with httpx.AsyncClient(headers=headers, cookies=cookies, follow_redirects=True, timeout=30.0) as own:
+                response = await own.get(url, params=params)
 
-            if response.status_code == 200:
-                if _is_login_page(str(response.url)):
-                    logger.warning("Session expired — redirected to the login page")
-                    return None
-                return response.text
+        if response.status_code == 200:
+            if _is_login_page(str(response.url)):
+                logger.warning("Session expired — redirected to the login page")
+                return None
+            return response.text
 
-            logger.warning(f"Unexpected status {response.status_code} for pageid={pageid}")
-            return None
+        logger.warning(f"Unexpected status {response.status_code} for pageid={pageid}")
+        return None
 
-        except Exception as e:
-            logger.error(f"Failed to scrape pageid={pageid}: {e}")
-            return None
+    except Exception as e:
+        logger.error(f"Failed to scrape pageid={pageid}: {e}")
+        return None
 
 def _filename_from_disposition(disposition: str | None, fallback: str) -> str:
     """Pull the filename out of a Content-Disposition header, else use fallback."""
@@ -322,14 +325,7 @@ async def fetch_scheduler_data(schulnetz_base_url: str, cookies: dict[str, str],
             logger.error(f"Failed to fetch scheduler data: {e}")
             return None
 
-async def save_semid(
-    schulnetz_base_url: str,
-    cookies: dict[str, str],
-    session_id: str,
-    transid: str,
-    sem_id: str,
-    user_agent: str | None = None,
-) -> bool:
+async def save_semid(schulnetz_base_url: str, cookies: dict[str, str], session_id: str, transid: str, sem_id: str, user_agent: str | None = None, client: httpx.AsyncClient | None = None) -> bool:
     """Set the session-active semester on the Noten page via its xajax call.
 
     The grades dropdown doesn't pass the semester as a URL param — its onchange
@@ -368,13 +364,16 @@ async def save_semid(
     if user_agent:
         headers["User-Agent"] = user_agent
 
-    async with httpx.AsyncClient(headers=headers, cookies=cookies, follow_redirects=True, timeout=30.0) as client:
-        try:
-            response = await client.post(url, params=params, content=body)
-            return response.status_code == 200
-        except Exception as e:
-            logger.error(f"Failed to save semester {sem_id}: {e}")
-            return False
+    try:
+        if client is not None:
+            response = await client.post(url, params=params, content=body, headers=headers)
+        else:
+            async with httpx.AsyncClient(headers=headers, cookies=cookies, follow_redirects=True, timeout=30.0) as own:
+                response = await own.post(url, params=params, content=body)
+        return response.status_code == 200
+    except Exception as e:
+        logger.error(f"Failed to save semester {sem_id}: {e}")
+        return False
 
 
 PAGE_IDS = {

@@ -20,6 +20,7 @@ class WebScrapeRequestDto(BaseModel):
     id: str = Field(..., description="Session id parameter from URL")
     transid: str = Field(..., description="Transaction id parameter from URL")
     user_agent: str | None = Field(None, description="The WebView UA that created the session (Schulnetz binds PHPSESSID to UA)")
+    semesters: list[str] | None = Field(None, description="Grades only: semester labels to fetch, e.g. [\"2. 25/26\", \"1. 25/26\"]. Omit to walk back from the current semester until the history ends.")
 
 class WebDownloadRequestDto(BaseModel):
     """Request DTO for downloading a filestore document's raw bytes."""
