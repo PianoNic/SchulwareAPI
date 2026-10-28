@@ -1,9 +1,9 @@
 # <p align="center">SchulwareAPI</p>
 <p align="center">
-  <img src="./assets/icon.svg" width="200" alt="SchulwareAPI Logo">
+  <img src="./assets/icon.svg" width="200" alt="SchulwareAPI, an unofficial schulNetz API">
 </p>
 <p align="center">
-  <strong>Unified API for schulNetz: sign-in, mobile REST and web scraping.</strong>
+  <strong>Unofficial schulNetz API for Swiss schools: grades, absences, timetable and more as JSON.</strong>
 </p>
 <p align="center">
   <a href="https://github.com/PianoNic/SchulwareAPI"><img src="https://badgetrack.pianonic.ch/badge?tag=schulware-api&label=visits&color=243aae&style=flat" alt="visits"/></a>
@@ -16,7 +16,17 @@
 
 ## About
 
-SchulwareAPI signs students in to their school's schulNetz and returns their data as JSON. It is stateless. The Swagger docs are at `/`.
+SchulwareAPI is an unofficial, self-hosted REST API for schulNetz, the school portal many Swiss schools use (Kantonsschulen, Berufsfachschulen, Gymnasien). It signs students in to their school's schulNetz and returns their data as JSON. It is stateless. The Swagger docs are at `/`.
+
+It powers the [Schuly](https://github.com/schulydev/Schuly) app.
+
+## What you can read
+
+- Grades (Noten) with class averages, and exams (Prüfungen)
+- Absences (Absenzen) and lateness
+- Timetable and agenda (Stundenplan)
+- Documents, semester reports (Zeugnisse) and courses
+- Push notifications for new grades
 
 ## Sign-in
 
@@ -46,7 +56,7 @@ services:
 docker compose up -d
 ```
 
-All settings are optional. See [`.env.example`](.env.example).
+All settings are optional, see [`.env.example`](.env.example). Set `DOCS_ENABLED=false` to hide the Swagger docs, or `OPENAPI_ENABLED=false` to also hide `/openapi.json`.
 
 ## License
 

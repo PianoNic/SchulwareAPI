@@ -67,10 +67,18 @@ URL as a `schulnetz_base_url` field in its JSON body instead.
 **Environment:** {app_config.get_environment()}
 """.strip()
 
+def _enabled(name: str) -> bool:
+    return os.getenv(name, "true").strip().lower() not in ("false", "0", "no", "off")
+
+
+OPENAPI_ENABLED = _enabled("OPENAPI_ENABLED")
+DOCS_ENABLED = OPENAPI_ENABLED and _enabled("DOCS_ENABLED")
+
 app = FastAPI(
     title="SchulwareAPI",
     description=_API_DESCRIPTION,
     version=app_config.get_version(),
+    openapi_url="/openapi.json" if OPENAPI_ENABLED else None,
     redoc_url=None,
     docs_url=None,  # custom docs route below wires up the favicon
     generate_unique_id_function=_custom_operation_id,
@@ -79,13 +87,14 @@ app = FastAPI(
 _ASSETS_DIR = Path(__file__).resolve().parents[2] / "assets"
 app.mount("/assets", StaticFiles(directory=_ASSETS_DIR), name="assets")
 
-@app.get("/", include_in_schema=False)
-def swagger_ui():
-    return get_swagger_ui_html(
-        openapi_url=app.openapi_url,
-        title=f"{app.title} - Docs",
-        swagger_favicon_url="/assets/icon.svg",
-    )
+if DOCS_ENABLED:
+    @app.get("/", include_in_schema=False)
+    def swagger_ui():
+        return get_swagger_ui_html(
+            openapi_url=app.openapi_url,
+            title=f"{app.title} - Docs",
+            swagger_favicon_url="/assets/icon.svg",
+        )
 
 app.add_middleware(SentryMiddleware)
 app.add_middleware(SentryAsyncContextMiddleware)
