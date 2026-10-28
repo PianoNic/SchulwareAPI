@@ -6,16 +6,19 @@ import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * Tab 2: Stateless /api/authenticate/refresh.
+ * Tab 2: Token refresh and silent re-login.
  *
- * Replays the `context_state` captured by the Auth tab to mint a fresh set of
- * tokens server-side, then updates the persisted context_state.
+ *  - POST /api/authenticate/refresh  { schulnetz_base_url, refresh_token, device_id }
+ *    (some schools answer `biometric_required`)
+ *  - POST /api/authenticate/login    { schulnetz_base_url, session_cookies }
  */
 class RefreshTab : TabSection {
 
@@ -27,56 +30,60 @@ class RefreshTab : TabSection {
             setPadding(0, 16, 0, 0)
         }
 
-        val refreshBtn = Button(ctx.activity).apply { text = "Refresh using stored cookies" }
+        val refreshBtn = Button(ctx.activity).apply { text = "Refresh with refresh_token" }
+        val reloginBtn = Button(ctx.activity).apply { text = "Re-login with session_cookies" }
 
         output = TextView(ctx.activity).apply {
-            text = "Tap to POST /api/authenticate/refresh with the stored context_state."
+            text = ctx.renderStored()
             setPadding(0, 32, 0, 0)
             movementMethod = ScrollingMovementMethod()
         }
         val scroll = ScrollView(ctx.activity).apply { addView(output) }
 
-        root.addView(refreshBtn)
-        root.addView(scroll)
+        listOf<View>(refreshBtn, reloginBtn, scroll).forEach { root.addView(it) }
 
         refreshBtn.setOnClickListener { performRefresh(ctx) }
+        reloginBtn.setOnClickListener { performRelogin(ctx) }
         return root
     }
 
     private fun performRefresh(ctx: TabContext) {
-        val apiBase = ctx.getApiBase()
-        val schulnetzBase = ctx.getSchulnetzBase()
-        output.text = "POST $apiBase/api/authenticate/refresh\n"
+        val refreshToken = ctx.prefs.getString("refresh_token", null)
+        if (refreshToken == null) {
+            output.text = "No refresh_token stored. Log in via the Auth tab first."
+            return
+        }
+        val deviceId = ctx.prefs.getString("device_id", null) ?: UUID.randomUUID().toString().also {
+            ctx.prefs.edit().putString("device_id", it).apply()
+        }
+        val payload = JSONObject().apply {
+            put("schulnetz_base_url", ctx.getSchulnetzBase())
+            put("refresh_token", refreshToken)
+            put("device_id", deviceId)
+        }
+        post(ctx, "/api/authenticate/refresh", payload)
+    }
 
+    private fun performRelogin(ctx: TabContext) {
+        val cookies = ctx.prefs.getString("session_cookies", null)
+        if (cookies == null) {
+            output.text = "No session_cookies stored. Do a credential login via the Auth tab first."
+            return
+        }
+        val payload = JSONObject().apply {
+            put("schulnetz_base_url", ctx.getSchulnetzBase())
+            put("session_cookies", JSONArray(cookies))
+        }
+        post(ctx, "/api/authenticate/login", payload)
+    }
+
+    private fun post(ctx: TabContext, path: String, payload: JSONObject) {
+        val url = "${ctx.getApiBase()}$path"
+        output.text = "POST $url\n"
         ctx.scope.launch {
-            val payload = JSONObject().apply {
-                put("schulnetz_base_url", schulnetzBase)
-                ctx.prefs.getString("context_state", null)?.let { put("context_state", JSONObject(it)) }
-                // MS binds session cookies to UA — replay with the same UA the WebView used.
-                ctx.prefs.getString("user_agent", null)?.let { put("user_agent", it) }
-            }
-            val (status, body) = withContext(Dispatchers.IO) {
-                Net.httpPost("$apiBase/api/authenticate/refresh", payload.toString())
-            }
-            val sb = StringBuilder()
-            sb.append("HTTP ").append(status).append("\n\n")
-            try {
-                val obj = JSONObject(body)
-                obj.optJSONObject("context_state")?.let {
-                    ctx.prefs.edit().putString("context_state", it.toString()).apply()
-                    sb.append("✓ context_state persisted (").append(it.toString().length).append(" chars)\n\n")
-                }
-                obj.optString("access_token", null)?.takeIf { it.isNotEmpty() }?.let {
-                    ctx.prefs.edit().putString("access_token", it).apply()
-                }
-                obj.optString("refresh_token", null)?.takeIf { it.isNotEmpty() }?.let {
-                    ctx.prefs.edit().putString("refresh_token", it).apply()
-                }
-                sb.append(obj.toString(2))
-            } catch (_: Exception) {
-                sb.append(body)
-            }
-            output.text = sb
+            val (status, body) = withContext(Dispatchers.IO) { Net.httpPost(url, payload.toString(), headers = ctx.headers()) }
+            runCatching { ctx.storeLogin(JSONObject(body)) }
+            output.text = "HTTP $status\n\n${prettyJson(body)}\n\n${ctx.renderStored()}"
         }
     }
 }

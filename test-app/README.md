@@ -1,8 +1,8 @@
 # Auth Test App
 
-Minimal Android app for hand-testing the stateless `/api/authenticate/refresh`
-endpoint. Tracks `context_state` round-trips in `SharedPreferences` so you can
-verify the stateless contract end to end.
+Minimal Android app for hand-testing SchulwareAPI sign-in, token refresh, the
+mobile proxy, and web-session scraping. Everything it gets back (tokens,
+`session_cookies`, web session) is kept in `SharedPreferences`.
 
 ## Build
 
@@ -10,7 +10,7 @@ CI builds a debug APK on every push to `test-app/**` and commits it to
 [`dist/AuthTestApp-debug.apk`](dist/AuthTestApp-debug.apk).
 `adb install dist/AuthTestApp-debug.apk` and you're done.
 
-Locally (needs Android SDK + Java 17):
+Locally (needs Android SDK + Java 17 or 21):
 
 ```sh
 cd test-app
@@ -20,13 +20,19 @@ cd test-app
 
 ## Use
 
-1. Open the app.
-2. Fill the **SchulwareAPI base URL** (default `https://schlwr.pianonic.ch`).
-3. Fill the **Schulnetz base URL** of the instance you're testing.
-4. (Optional) Fill email + password — only needed when no stored context_state
-   exists yet OR the Microsoft SSO session has expired server-side.
-5. Tap **POST /api/authenticate/refresh**. The app:
-   - Sends `{schulnetz_base_url, context_state?, email?, password?}`
-   - Reads the response, persists `context_state` on success
-   - Renders the pretty-printed JSON in the output area
-6. Tap **Forget stored context_state** to reset and test the cold-start path.
+Fill the **SchulwareAPI base URL**, the **Schulnetz base URL**, and, if the
+server sets `SERVICE_API_KEY`, the **Service key**. Every request sends
+`X-Schulnetz-Base-Url` (and `X-Service-Key` when set).
+
+- **Auth**: *Check login method* (`GET /api/authenticate/login-method`), then
+  either *Credential login* (`POST /api/authenticate/login` with email, password,
+  optional TOTP) or *Browser login*, which opens `/browser/start`'s `auth_url`
+  in a WebView, catches the `callback_url` redirect, and calls `/browser/complete`.
+- **Refresh**: `POST /api/authenticate/refresh` with the stored `refresh_token` +
+  `device_id` (some schools answer `biometric_required`), or a silent re-login
+  via `/login` with the stored `session_cookies`.
+- **Webscrape**: `/api/websession/scrape` and `/validate` with the web session
+  from the last login (or one captured in the WebView).
+- **Mobile Proxy**: `GET /api/mobile/<endpoint>` with the stored access token.
+
+**Reset all stored state** clears everything.
