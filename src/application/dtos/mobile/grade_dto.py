@@ -18,6 +18,8 @@ class GradeDto(BaseModel):
     isConfirmed: bool | None = None
     isConfirmedByTrainer: bool | None = None
     courseGrade: float | None = None
+    classGrade: float | None = None
+    isConfirmedByParent: bool | None = None
     examinationGroups: ExaminationGroupsDto | None = None
     studentId: str | None = None
     studentName: str | None = None
