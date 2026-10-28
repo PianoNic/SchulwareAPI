@@ -20,12 +20,12 @@ import kotlinx.coroutines.Job
 /**
  * SchulwareAPI Auth Test App — tabbed harness.
  *
- *  Tab 1 – Auth:        OAuth login → access/refresh tokens + context_state
- *  Tab 2 – Refresh:     stateless /refresh using stored context_state
- *  Tab 3 – Webscrape:   web OAuth → capture → scrape / validate
+ *  Tab 1 – Auth:        login-method, credential login or browser login → tokens + session_cookies
+ *  Tab 2 – Refresh:     /refresh with the refresh_token, or /login with stored session_cookies
+ *  Tab 3 – Webscrape:   /websession scrape / validate with the stored web session
  *  Tab 4 – Mobile Proxy: GET each /api/mobile/... endpoint with the access_token
  *
- * Tabs share: the API + Schulnetz base URL inputs (header), a single WebView
+ * Tabs share: the API + Schulnetz base URL and service key inputs (header), a single WebView
  * (so SSO state carries across flows), and SharedPreferences for all
  * persisted tokens/cookies.
  */
@@ -36,6 +36,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var apiBaseInput: EditText
     private lateinit var schulnetzBaseInput: EditText
+    private lateinit var serviceKeyInput: EditText
     private lateinit var sharedWebView: WebView
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -50,6 +51,7 @@ class MainActivity : AppCompatActivity() {
         // ---- shared header: base URL inputs + reset button ----
         apiBaseInput = field("SchulwareAPI base URL", prefs.getString("api_base", "http://localhost:8000") ?: "")
         schulnetzBaseInput = field("Schulnetz base URL", prefs.getString("schulnetz_base", "https://schulnetz.bbbaden.ch") ?: "")
+        serviceKeyInput = field("Service key (optional, X-Service-Key)", prefs.getString("service_key", "") ?: "")
         val clearBtn = Button(this).apply { text = "Reset all stored state" }
 
         // ---- shared WebView (hidden by default; tabs flip it visible during OAuth) ----
@@ -72,6 +74,7 @@ class MainActivity : AppCompatActivity() {
             sharedWebView = sharedWebView,
             getApiBase = { apiBaseInput.text.toString().trimEnd('/') },
             getSchulnetzBase = { schulnetzBaseInput.text.toString().trimEnd('/') },
+            getServiceKey = { serviceKeyInput.text.toString().trim() },
         )
 
         // ---- build the four tab views ----
@@ -121,7 +124,7 @@ class MainActivity : AppCompatActivity() {
         })
 
         // ---- assemble ----
-        listOf<View>(apiBaseInput, schulnetzBaseInput, clearBtn, tabLayout, container)
+        listOf<View>(apiBaseInput, schulnetzBaseInput, serviceKeyInput, clearBtn, tabLayout, container)
             .forEach { root.addView(it) }
         setContentView(root)
 
@@ -134,12 +137,14 @@ class MainActivity : AppCompatActivity() {
         // Persist base URLs on every text change so they survive process death.
         apiBaseInput.setOnFocusChangeListener { _, hasFocus -> if (!hasFocus) persistBaseInputs() }
         schulnetzBaseInput.setOnFocusChangeListener { _, hasFocus -> if (!hasFocus) persistBaseInputs() }
+        serviceKeyInput.setOnFocusChangeListener { _, hasFocus -> if (!hasFocus) persistBaseInputs() }
     }
 
     private fun persistBaseInputs() {
         prefs.edit()
             .putString("api_base", apiBaseInput.text.toString())
             .putString("schulnetz_base", schulnetzBaseInput.text.toString())
+            .putString("service_key", serviceKeyInput.text.toString())
             .apply()
     }
 

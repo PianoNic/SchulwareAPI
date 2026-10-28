@@ -11,8 +11,6 @@ import android.widget.TextView
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.json.JSONArray
-import org.json.JSONObject
 
 /**
  * Tab 4: Mobile proxy — exercise the /api/mobile/... endpoints with the stored access_token as a Bearer.
@@ -46,6 +44,9 @@ class ProxyTab : TabSection {
         "settings"                to "settings",
         "customfields"            to "customfields",
         "filecategories"          to "filecategories",
+        "filestore"               to "filestore",
+        "certificates"            to "certificates",
+        "courses"                 to "courses",
         "studentidcard/1"         to "studentidcard/1",
     )
 
@@ -65,7 +66,7 @@ class ProxyTab : TabSection {
         val getBtn = Button(ctx.activity).apply { text = "GET selected endpoint" }
 
         output = TextView(ctx.activity).apply {
-            text = "Authorization: Bearer <access_token from Auth tab>"
+            text = "Authorization: Bearer <access_token from Auth tab> + X-Schulnetz-Base-Url"
             setPadding(0, 32, 0, 0)
             movementMethod = ScrollingMovementMethod()
         }
@@ -88,19 +89,11 @@ class ProxyTab : TabSection {
         output.text = "GET $url\n"
 
         ctx.scope.launch {
-            val (status, body) = withContext(Dispatchers.IO) { Net.httpGet(url, bearer = token) }
+            val (status, body) = withContext(Dispatchers.IO) { Net.httpGet(url, bearer = token, headers = ctx.headers()) }
             val sb = StringBuilder()
             sb.append("HTTP ").append(status).append("\n\n")
             sb.append(prettyJson(body))
             output.text = sb
         }
-    }
-
-    /** Best-effort pretty-print: tries object, then array, then falls back to raw. */
-    private fun prettyJson(body: String): String {
-        if (body.isEmpty()) return ""
-        return runCatching { JSONObject(body).toString(2) }
-            .recoverCatching { JSONArray(body).toString(2) }
-            .getOrElse { body }
     }
 }

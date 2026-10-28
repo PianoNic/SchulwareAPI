@@ -20,20 +20,14 @@ import org.json.JSONObject
 /**
  * Tab 3: Web session — exercise the /api/websession/... endpoints.
  *
- * Architecture note: the OAuth code Schulnetz issues is bound to the BROWSER's
- * Microsoft session cookies, so it can ONLY be redeemed by the WebView itself.
- * Server-side code exchange returns a PHPSESSID for an UNauthenticated session
- * (we tested this — the response is the "session expired" page). So the test
- * app extracts the session material directly from the WebView once login
- * completes, then sends those to /scrape and /validate.
+ * A login on the Auth or Refresh tab stores session_id, id and transid. For
+ * schools without one (browser sign-in), step 1 opens `{schulnetzBase}/` in
+ * the WebView and pulls PHPSESSID, id and transid from the dashboard.
  *
- *  1. Open `{schulnetzBase}/` in a WebView. Schulnetz redirects through MS SSO
- *     and ultimately lands on `{schulnetzBase}/loginto.php?mode=4&lang=` (the
- *     dashboard). At that point the WebView's cookie jar has a real PHPSESSID
- *     and the page's nav links contain `id` and `transid`.
- *  2. Extract session_id (PHPSESSID), id, transid from the WebView.
- *  3. POST /api/websession/scrape    { session_id, id, transid, page }
- *  4. POST /api/websession/validate  { session_id, id, transid }
+ *  - POST /api/websession/scrape    { session_id, id, transid, page }
+ *  - POST /api/websession/validate  { session_id, id, transid }
+ *
+ * Every call sends `X-Schulnetz-Base-Url`.
  */
 class WebscrapeTab : TabSection {
 
@@ -52,7 +46,7 @@ class WebscrapeTab : TabSection {
             setPadding(0, 16, 0, 0)
         }
 
-        val captureBtn = Button(ctx.activity).apply { text = "1. Login via Web OAuth (one-time)" }
+        val captureBtn = Button(ctx.activity).apply { text = "1. Capture via WebView (optional, login fills this too)" }
 
         pageSpinner = Spinner(ctx.activity).apply {
             adapter = ArrayAdapter(ctx.activity, android.R.layout.simple_spinner_dropdown_item, pages)
@@ -171,7 +165,7 @@ class WebscrapeTab : TabSection {
         val id = ctx.prefs.getString("web_id", null)
         val transid = ctx.prefs.getString("web_transid", null)
         if (sid == null || id == null || transid == null) {
-            output.text = "No web session stored. Run step 1 first."
+            output.text = "No web session stored. Log in via the Auth tab or run step 1."
             return
         }
         val page = pageSpinner.selectedItem as String
@@ -187,7 +181,7 @@ class WebscrapeTab : TabSection {
                 if (ua != null) put("user_agent", ua)
             }
             val (status, body) = withContext(Dispatchers.IO) {
-                Net.httpPost("$apiBase/api/websession/scrape", payload.toString())
+                Net.httpPost("$apiBase/api/websession/scrape", payload.toString(), headers = ctx.headers())
             }
             renderJson(status, body)
         }
@@ -200,7 +194,7 @@ class WebscrapeTab : TabSection {
         val id = ctx.prefs.getString("web_id", null)
         val transid = ctx.prefs.getString("web_transid", null)
         if (sid == null || id == null || transid == null) {
-            output.text = "No web session stored. Run step 1 first."
+            output.text = "No web session stored. Log in via the Auth tab or run step 1."
             return
         }
         val ua = ctx.prefs.getString("web_user_agent", null)
@@ -215,7 +209,7 @@ class WebscrapeTab : TabSection {
                 if (ua != null) put("user_agent", ua)
             }
             val (status, body) = withContext(Dispatchers.IO) {
-                Net.httpPost("$apiBase/api/websession/validate", payload.toString())
+                Net.httpPost("$apiBase/api/websession/validate", payload.toString(), headers = ctx.headers())
             }
             renderJson(status, body)
         }
@@ -224,11 +218,7 @@ class WebscrapeTab : TabSection {
     private fun renderJson(status: Int, body: String) {
         val sb = StringBuilder()
         sb.append("HTTP ").append(status).append("\n\n")
-        try {
-            sb.append(JSONObject(body).toString(2))
-        } catch (_: Exception) {
-            sb.append(body)
-        }
+        sb.append(prettyJson(body))
         output.text = sb
     }
 
