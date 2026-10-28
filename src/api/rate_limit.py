@@ -1,7 +1,7 @@
 """Shared rate-limit infrastructure.
 
 Provides the process-wide `shared_limiter` instance, a reverse-proxy-aware
-client IP resolver, the service-key check for the Schuly backend, and the
+client IP resolver, the service-key check for a trusted backend, and the
 standard 429 response handler.
 """
 
@@ -61,7 +61,7 @@ def get_client_ip(request: Request) -> str:
 
 
 def is_service_request(request: Request) -> bool:
-    """True when the request carries the configured SERVICE_API_KEY (the Schuly backend)."""
+    """True when the request carries the configured SERVICE_API_KEY (a trusted backend)."""
     expected = os.getenv("SERVICE_API_KEY")
     provided = request.headers.get(SERVICE_KEY_HEADER)
     return bool(expected and provided and hmac.compare_digest(provided, expected))
