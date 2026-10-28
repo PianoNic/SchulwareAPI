@@ -82,8 +82,6 @@ services:
     env_file:
       - .env
     restart: unless-stopped
-    init: true  # Recommended to avoid zombie processes
-    ipc: host   # Recommended for Chromium to avoid memory crashes
 ```
 
 **2. Start it:**
