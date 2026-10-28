@@ -18,8 +18,6 @@
 
 SchulwareAPI is an unofficial, self-hosted REST API for schulNetz, the school portal many Swiss schools use (Kantonsschulen, Berufsfachschulen, Gymnasien). It signs students in to their school's schulNetz and returns their data as JSON. It is stateless. The Swagger docs are at `/`.
 
-It powers the [Schuly](https://github.com/schulydev/Schuly) app.
-
 ## What you can read
 
 - Grades (Noten) with class averages, and exams (Prüfungen)

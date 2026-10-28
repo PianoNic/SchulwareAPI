@@ -1,6 +1,6 @@
 """DTOs for the unified, stateless Schulnetz login.
 
-One endpoint, one shape: the caller (e.g. the Schuly Schulware plugin) passes in
+One endpoint, one shape: the caller passes in
 credentials and/or a previously returned `session_cookies` jar, SchulwareAPI
 replays it headlessly through Microsoft Entra (via `ms-entrance`), and returns
 fresh tokens, the web session, and the rotated `session_cookies` to persist —
