@@ -7,6 +7,4 @@ services:
       - "8000:8000"
     environment:
       - PYTHONUNBUFFERED=1
-    env_file:
-      - .env
     restart: unless-stopped

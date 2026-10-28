@@ -45,8 +45,6 @@ services:
     # image: pianonic/schulwareapi:latest # Docker Hub
     ports:
       - "8000:8000"
-    env_file:
-      - .env
     restart: unless-stopped
 ```
 
@@ -54,7 +52,7 @@ services:
 docker compose up -d
 ```
 
-All settings are optional, see [`.env.example`](.env.example). Set `DOCS_ENABLED=false` to hide the Swagger docs, or `OPENAPI_ENABLED=false` to also hide `/openapi.json`.
+All settings are optional. To set any, add them under `environment:` or point `env_file:` at a copy of [`.env.example`](.env.example). Set `DOCS_ENABLED=false` to hide the Swagger docs, or `OPENAPI_ENABLED=false` to also hide `/openapi.json`.
 
 ## License
 
