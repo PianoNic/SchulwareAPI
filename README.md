@@ -16,7 +16,7 @@
 
 ## About
 
-SchulwareAPI signs students in to their school's schulNetz and returns their data as JSON. It stores nothing: the caller keeps the tokens and passes them back in. Each request names its school, so one instance works for every schulNetz school. The Swagger docs are at `/`.
+SchulwareAPI signs students in to their school's schulNetz and returns their data as JSON. It is stateless. The Swagger docs are at `/`.
 
 ## Sign-in
 
@@ -33,7 +33,8 @@ All other requests send the school's URL in the `X-Schulnetz-Base-Url` header.
 ```yaml
 services:
   schulware-api:
-    image: pianonic/schulwareapi:latest
+    image: ghcr.io/pianonic/schulwareapi:latest
+    # image: pianonic/schulwareapi:latest # Docker Hub
     ports:
       - "8000:8000"
     env_file:
