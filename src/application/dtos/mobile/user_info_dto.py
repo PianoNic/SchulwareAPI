@@ -1,4 +1,6 @@
 
+from typing import Any
+
 from pydantic import BaseModel
 from src.application.dtos.mobile.class_info_dto import ClassInfoDto
 
@@ -28,4 +30,4 @@ class UserInfoDto(BaseModel):
     exitDate: str | None = None
     regularClasses: list[ClassInfoDto] | None = None
     additionalClasses: list[ClassInfoDto] | None = None
-
+    permissions: dict[str, Any] | None = None

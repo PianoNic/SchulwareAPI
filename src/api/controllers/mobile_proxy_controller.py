@@ -8,6 +8,7 @@ from src.api.auth.token_dependency import get_current_token
 from src.api.controller import controller
 from src.api.dependencies import get_mediator, get_schulnetz_base_url
 from src.application.dtos.mobile.absence_dto import AbsenceDto
+from src.application.dtos.mobile.absence_create_dto import AbsenceCreateDto, AbsenceCreateResultDto
 from src.application.dtos.mobile.absencenotice_dto import AbsenceNoticeDto
 from src.application.dtos.mobile.absencenoticestatus_dto import AbsenceNoticeStatusDto
 from src.application.dtos.mobile.certificate_grade_dto import CertificateGradeDto
@@ -70,6 +71,15 @@ class MobileProxyController:
     @router.get("/absences", dependencies=[Depends(security)], response_model=list[AbsenceDto])
     async def get_absences(self, token: str = Depends(get_current_token), base_url: str = Depends(get_schulnetz_base_url)):
         return await self.mediator.send(ProxyMobileRestQuery(token, "me/absences", "GET", base_url=base_url))
+
+    @router.post("/absences", operation_id="mobile-absences-create", dependencies=[Depends(security)], response_model=list[AbsenceCreateResultDto])
+    async def create_absences(self, body: list[AbsenceCreateDto], token: str = Depends(get_current_token), base_url: str = Depends(get_schulnetz_base_url)):
+        payload = [item.model_dump(exclude_none=True) for item in body]
+        return await self.mediator.send(ProxyMobileRestQuery(token, "me/absences", "POST", base_url=base_url, body=payload))
+
+    @router.delete("/absences/{absence_id}", operation_id="mobile-absences-delete", dependencies=[Depends(security)], response_model=AbsenceCreateResultDto)
+    async def delete_absence(self, absence_id: str, token: str = Depends(get_current_token), base_url: str = Depends(get_schulnetz_base_url)):
+        return await self.mediator.send(ProxyMobileRestQuery(token, f"me/absences/{absence_id}", "DELETE", base_url=base_url))
 
     @router.get("/absencenotices", dependencies=[Depends(security)], response_model=list[AbsenceNoticeDto])
     async def get_absence_notices(self, token: str = Depends(get_current_token), base_url: str = Depends(get_schulnetz_base_url)):
