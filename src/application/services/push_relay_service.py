@@ -126,7 +126,7 @@ class PushRelay:
                         logger.info("push relay: forwarded %s for %s (%d)", persistent_id, listener_id, response.status_code)
                         return
                 except httpx.HTTPError as ex:
-                    logger.warning("push relay: callback for %s failed: %s", listener_id, ex)
+                    logger.warning("push relay: callback for %s failed: %s", listener_id, type(ex).__name__)
                 await asyncio.sleep(2 ** attempt)
             logger.error("push relay: gave up forwarding %s for %s", persistent_id, listener_id)
         finally:
@@ -143,7 +143,7 @@ class PushRelay:
             try:
                 await listener.client.stop()
             except Exception as ex:
-                logger.warning("push relay: stopping a listener failed: %s", ex)
+                logger.warning("push relay: stopping a listener failed: %s", type(ex).__name__)
 
 
 push_relay = PushRelay()

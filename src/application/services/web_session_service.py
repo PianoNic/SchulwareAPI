@@ -88,21 +88,21 @@ async def capture_web_session(
                 if follow:
                     session_info = {**(session_info or {}), **follow}
 
-            logger.info(f"Final status: {response.status_code}, URL: {response.url}")
+            logger.info(f"Final status: {response.status_code}")
             logger.info(f"Cookies captured: {list(cookies.keys())}")
 
             if "PHPSESSID" not in cookies:
                 logger.warning("No PHPSESSID captured — login may have failed")
                 return None, None
 
-            logger.info(f"Session captured. PHPSESSID: {cookies['PHPSESSID'][:20]}...")
+            logger.info("Session captured")
             if session_info:
-                logger.info(f"Session id: {session_info.get('id')}, transid: {session_info.get('transid')}, pages: {len(session_info.get('navigation_urls', {}))}")
+                logger.info(f"Session pages: {len(session_info.get('navigation_urls', {}))}")
 
             return cookies, session_info
 
         except Exception as e:
-            logger.error(f"Failed to capture web session: {e}")
+            logger.error(f"Failed to capture web session: {type(e).__name__}")
             return None, None
 
 def _extract_session_info(url: str, html: str) -> dict[str, str] | None:
@@ -193,7 +193,7 @@ async def scrape_page(schulnetz_base_url: str, cookies: dict[str, str], pageid: 
         return None
 
     except Exception as e:
-        logger.error(f"Failed to scrape pageid={pageid}: {e}")
+        logger.error(f"Failed to scrape pageid={pageid}: {type(e).__name__}")
         return None
 
 def _filename_from_disposition(disposition: str | None, fallback: str) -> str:
@@ -238,7 +238,7 @@ async def download_file(
         try:
             response = await client.get(url)
             if response.status_code != 200 or _is_login_page(str(response.url)):
-                logger.warning(f"Download failed (status {response.status_code}) for {url}")
+                logger.warning(f"Download failed (status {response.status_code})")
                 return None
 
             content_type = response.headers.get("content-type", "application/octet-stream")
@@ -251,7 +251,7 @@ async def download_file(
                 response.headers.get("content-disposition"), "document")
             return response.content, content_type, filename
         except Exception as e:
-            logger.error(f"Failed to download file: {e}")
+            logger.error(f"Failed to download file: {type(e).__name__}")
             return None
 
 
@@ -322,7 +322,7 @@ async def fetch_scheduler_data(schulnetz_base_url: str, cookies: dict[str, str],
             logger.warning(f"Scheduler returned {response.status_code}")
             return None
         except Exception as e:
-            logger.error(f"Failed to fetch scheduler data: {e}")
+            logger.error(f"Failed to fetch scheduler data: {type(e).__name__}")
             return None
 
 async def save_semid(schulnetz_base_url: str, cookies: dict[str, str], session_id: str, transid: str, sem_id: str, user_agent: str | None = None, client: httpx.AsyncClient | None = None) -> bool:
@@ -372,7 +372,7 @@ async def save_semid(schulnetz_base_url: str, cookies: dict[str, str], session_i
                 response = await own.post(url, params=params, content=body)
         return response.status_code == 200
     except Exception as e:
-        logger.error(f"Failed to save semester {sem_id}: {e}")
+        logger.error(f"Failed to save semester {sem_id}: {type(e).__name__}")
         return False
 
 
