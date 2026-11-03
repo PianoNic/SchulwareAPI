@@ -114,8 +114,7 @@ class LoginHandler(ICommandHandler[LoginCommand, LoginResponseDto]):
                 mob_res["code"], mob["code_verifier"], base
             )
 
-            logger.info("login: php=%s id=%s transid=%s token=%s",
-                        bool(session_id), web_info.get("id"), web_info.get("transid"), bool(access_token))
+            logger.info("login: php=%s token=%s", bool(session_id), bool(access_token))
 
             return LoginResponseDto(
                 success=True,
@@ -141,7 +140,7 @@ class LoginHandler(ICommandHandler[LoginCommand, LoginResponseDto]):
         except LoginFailed as ex:
             return LoginResponseDto(success=False, message=f"Login failed: {ex}")
         except Exception as ex:
-            logger.exception("Login failed")
+            logger.error("Login failed: %s", type(ex).__name__)
             return LoginResponseDto(success=False, message=f"Login failed: {ex}")
 
     async def _native_login(self, base: str, command: LoginCommand) -> LoginResponseDto:
@@ -152,10 +151,10 @@ class LoginHandler(ICommandHandler[LoginCommand, LoginResponseDto]):
         except NativeLoginFailed as ex:
             return LoginResponseDto(success=False, message=f"Login failed: {ex}")
         except Exception as ex:
-            logger.exception("Native login failed")
+            logger.error("Native login failed: %s", type(ex).__name__)
             return LoginResponseDto(success=False, message=f"Login failed: {ex}")
 
-        logger.info("native login: php=%s id=%s transid=%s token=%s", "PHPSESSID" in cookies, info.get("id"), info.get("transid"), bool(access_token))
+        logger.info("native login: php=%s token=%s", "PHPSESSID" in cookies, bool(access_token))
         return LoginResponseDto(
             success=True,
             access_token=access_token,

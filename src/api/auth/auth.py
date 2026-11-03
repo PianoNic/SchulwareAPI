@@ -70,13 +70,13 @@ def extract_auth_code_from_url(url: str) -> tuple[str | None, str | None]:
         received_state = query_params.get("state", [None])[0]
 
         if auth_code:
-            logger.info(f"Extracted auth code: {auth_code[:50]}... (length: {len(auth_code)})")
+            logger.info("Extracted auth code")
         if received_state:
-            logger.info(f"Extracted state: {received_state[:50]}... (length: {len(received_state)})")
+            logger.info("Extracted state")
 
         return auth_code, received_state
     except Exception as e:
-        logger.error(f"Error extracting auth code from URL: {e}")
+        logger.error(f"Error extracting auth code from URL: {type(e).__name__}")
         return None, None
 
 
@@ -126,7 +126,6 @@ async def exchange_code_for_tokens(auth_code: str, code_verifier: str, base_url:
     }
 
     logger.info("Exchanging authorization code for tokens...")
-    logger.info(f"Token exchange URL: {token_url}")
 
     try:
         token_response = await httpx_client.post(
@@ -146,10 +145,10 @@ async def exchange_code_for_tokens(auth_code: str, code_verifier: str, base_url:
             return None, None
 
     except httpx.RequestError as e:
-        logger.error(f"HTTP error during token exchange: {e}")
+        logger.error(f"HTTP error during token exchange: {type(e).__name__}")
         return None, None
     except httpx.HTTPStatusError as e:
-        logger.error(f"HTTP Status Error during token exchange: {e.response.status_code} - {e.response.text}")
+        logger.error(f"HTTP Status Error during token exchange: {e.response.status_code}")
         return None, None
     finally:
         await httpx_client.aclose()

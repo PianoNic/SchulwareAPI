@@ -51,6 +51,10 @@ def setup_colored_logging():
         uvicorn_logger.setLevel(logging.INFO)
         uvicorn_logger.propagate = False
     
+    # At INFO, httpx logs every request's full URL, which names the school and the page.
+    for noisy in ("httpx", "httpcore"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
+
     return root_logger
 
 def get_logger(name: str = None):

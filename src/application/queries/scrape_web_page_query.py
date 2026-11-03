@@ -143,7 +143,7 @@ class ScrapeWebPageHandler(IQueryHandler[ScrapeWebPageQuery, WebScrapeResponseDt
             try:
                 return WebScrapeResponseDto(success=True, schedule=parse_scheduler_xml(xml))
             except Exception as e:
-                logger.error(f"Schedule parser error: {e}")
+                logger.error(f"Schedule parser error: {type(e).__name__}")
                 return WebScrapeResponseDto(success=False, message=f"Parsing error: {str(e)}")
 
         if body.page not in SCRAPERS:
@@ -165,5 +165,5 @@ class ScrapeWebPageHandler(IQueryHandler[ScrapeWebPageQuery, WebScrapeResponseDt
             # Each scraper returns its page's typed model; place it in the matching field.
             return WebScrapeResponseDto(success=True, **{body.page: parser(html)})
         except Exception as e:
-            logger.error(f"Scraper error for {body.page}: {e}")
+            logger.error(f"Scraper error for {body.page}: {type(e).__name__}")
             return WebScrapeResponseDto(success=False, message=f"Parsing error: {str(e)}")
