@@ -15,7 +15,6 @@ back to credentials (when provided), or raises `NeedsCredentials`.
 import asyncio
 import time
 from dataclasses import dataclass
-from urllib.parse import urlparse
 
 from entrance import LoginFailed, MfaRequired, NeedsCredentials
 from entrance import login as ms_login
@@ -62,11 +61,11 @@ class LoginCommand(ICommand[LoginResponseDto]):
     user_agent: str | None = None
 
 
-def _log_failure(base: str, step: str, ex: BaseException) -> None:
-    """Logs a failed Microsoft login: step, school host, exception type and AADSTS number, never the message."""
+def _log_failure(step: str, ex: BaseException) -> None:
+    """Logs a failed Microsoft login: step, exception type and AADSTS number, never the school or the message."""
     code = getattr(ex, "code", None)
     aadsts = code if isinstance(code, str) and code.isdigit() and len(code) <= 10 else "-"
-    logger.warning("Microsoft login failed at the %s step for %s: %s (AADSTS %s)", step, urlparse(base).hostname or "-", type(ex).__name__, aadsts)
+    logger.warning("Microsoft login failed at the %s step: %s (AADSTS %s)", step, type(ex).__name__, aadsts)
 
 
 class LoginHandler(ICommandHandler[LoginCommand, LoginResponseDto]):
@@ -138,19 +137,19 @@ class LoginHandler(ICommandHandler[LoginCommand, LoginResponseDto]):
             )
 
         except NeedsCredentials as ex:
-            _log_failure(base, step, ex)
+            _log_failure(step, ex)
             return LoginResponseDto(
                 success=False,
                 message="Microsoft SSO session expired or no cookies given. Provide email + password to sign in.",
             )
         except MfaRequired as ex:
-            _log_failure(base, step, ex)
+            _log_failure(step, ex)
             return LoginResponseDto(
                 success=False,
                 message=f"MFA required: {ex}. Provide a TOTP secret/code or re-authenticate interactively.",
             )
         except LoginFailed as ex:
-            _log_failure(base, step, ex)
+            _log_failure(step, ex)
             return LoginResponseDto(success=False, message=f"Login failed: {ex}")
         except Exception as ex:
             logger.error("Login failed: %s at the %s step", type(ex).__name__, step)
