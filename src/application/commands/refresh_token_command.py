@@ -13,6 +13,7 @@ back to credentials (when provided), or raises `NeedsCredentials`.
 """
 
 import asyncio
+import re
 import time
 from dataclasses import dataclass
 
@@ -61,11 +62,19 @@ class LoginCommand(ICommand[LoginResponseDto]):
     user_agent: str | None = None
 
 
+_KINDS = (("OAuth error", "oauth"), ("Entra error", "entra"), ("Login rejected", "rejected"), ("Too many hops", "hops"), ("Stuck on a page", "stuck"), ("Token endpoint", "token"))
+_NUMBER = re.compile(r"(?:AADSTS|sErrorCode=)(\d{1,10})")
+
+
 def _log_failure(step: str, ex: BaseException) -> None:
-    """Logs a failed Microsoft login: step, exception type and AADSTS number, never the school or the message."""
+    """Logs a failed Microsoft login: step, exception type, the kind of failure and the AADSTS number, never the school or the message."""
+    text = str(ex)
     code = getattr(ex, "code", None)
-    aadsts = code if isinstance(code, str) and code.isdigit() and len(code) <= 10 else "-"
-    logger.warning("Microsoft login failed at the %s step: %s (AADSTS %s)", step, type(ex).__name__, aadsts)
+    if not (isinstance(code, str) and code.isdigit() and len(code) <= 10):
+        match = _NUMBER.search(text)
+        code = match.group(1) if match else "-"
+    kind = next((name for prefix, name in _KINDS if text.startswith(prefix)), "-")
+    logger.warning("Microsoft login failed at the %s step: %s, %s (AADSTS %s)", step, type(ex).__name__, kind, code)
 
 
 class LoginHandler(ICommandHandler[LoginCommand, LoginResponseDto]):
