@@ -15,6 +15,7 @@ back to credentials (when provided), or raises `NeedsCredentials`.
 import asyncio
 import time
 from dataclasses import dataclass
+from urllib.parse import urlparse
 
 from entrance import LoginFailed, MfaRequired, NeedsCredentials
 from entrance import login as ms_login
@@ -61,6 +62,13 @@ class LoginCommand(ICommand[LoginResponseDto]):
     user_agent: str | None = None
 
 
+def _log_failure(base: str, step: str, ex: BaseException) -> None:
+    """Logs a failed Microsoft login: step, school host, exception type and AADSTS number, never the message."""
+    code = getattr(ex, "code", None)
+    aadsts = code if isinstance(code, str) and code.isdigit() and len(code) <= 10 else "-"
+    logger.warning("Microsoft login failed at the %s step for %s: %s (AADSTS %s)", step, urlparse(base).hostname or "-", type(ex).__name__, aadsts)
+
+
 class LoginHandler(ICommandHandler[LoginCommand, LoginResponseDto]):
     """Mint fresh mobile + web tokens by replaying the cookie jar (or credentials)
     through Microsoft Entra headlessly via ms-entrance, then exchanging the
@@ -84,6 +92,7 @@ class LoginHandler(ICommandHandler[LoginCommand, LoginResponseDto]):
         if cookies:
             logger.info("Login: replaying %d stored cookies", len(cookies))
 
+        step = "web"
         try:
             # 1) Web session round-trip → PHPSESSID + id/transid. Replicate the
             # browser: start OAuth from the school root (redirect_uri=`/`, no PKCE)
@@ -107,6 +116,7 @@ class LoginHandler(ICommandHandler[LoginCommand, LoginResponseDto]):
             web_info = web_info or {}
 
             # 2) Mobile token round-trip → access/refresh tokens.
+            step = "mobile"
             mob = generate_oauth_url(base, auth_type="mobile")
             mob_res = await self._login(mob["auth_url"], command, cookies)
             cookies = mob_res.get("session_cookies") or cookies
@@ -127,20 +137,23 @@ class LoginHandler(ICommandHandler[LoginCommand, LoginResponseDto]):
                 message="Tokens and session refreshed successfully",
             )
 
-        except NeedsCredentials:
+        except NeedsCredentials as ex:
+            _log_failure(base, step, ex)
             return LoginResponseDto(
                 success=False,
                 message="Microsoft SSO session expired or no cookies given. Provide email + password to sign in.",
             )
         except MfaRequired as ex:
+            _log_failure(base, step, ex)
             return LoginResponseDto(
                 success=False,
                 message=f"MFA required: {ex}. Provide a TOTP secret/code or re-authenticate interactively.",
             )
         except LoginFailed as ex:
+            _log_failure(base, step, ex)
             return LoginResponseDto(success=False, message=f"Login failed: {ex}")
         except Exception as ex:
-            logger.error("Login failed: %s", type(ex).__name__)
+            logger.error("Login failed: %s at the %s step", type(ex).__name__, step)
             return LoginResponseDto(success=False, message=f"Login failed: {ex}")
 
     async def _native_login(self, base: str, command: LoginCommand) -> LoginResponseDto:
