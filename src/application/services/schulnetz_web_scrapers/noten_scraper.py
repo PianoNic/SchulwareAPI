@@ -107,6 +107,42 @@ def scrape_noten(html: str) -> GradesPageDto:
     if outer is None:
         return GradesPageDto(student=student, courses=courses)
 
+    # Course codes differ per school ("DEU-G4d-SiM", "Einf.4.1 (EF)", "spm.4.d (SPO)"), so a
+    # course row is recognised by its shape: a bold code in the first of several own cells.
+    # A row holding a nested table carries the exams of the course row right above it.
+    for row in outer.find_all("tr"):
+        if row.find_parent("table") is not outer:
+            continue
+        if row.find("table") is not None:
+            if courses:
+                courses[-1].exams = _exams_from_detail(row.find("table"))
+            continue
+        cells = _own_cells(row, outer)
+        if len(cells) < 2:
+            continue
+        cell0 = cells[0]
+        bold = cell0.find("b")
+        raw = _clean(cell0.get_text())
+        if bold is None and not _COURSE_RE.match(raw):
+            continue
+        # The course cell is "<b>{token}</b><br>{subject name}" — get_text()
+        # smushes them together, so split the bold token off and keep the
+        # human-readable subject name (fall back to the token if there's no name).
+        if bold is not None:
+            token = _clean(bold.get_text())
+            if not token:
+                continue
+            name = _clean(cell0.get_text(" ").replace(token, "", 1)) or token
+        else:
+            token = None
+            name = raw
+        average = _num(_clean(cells[1].get_text()))
+        row_text = _clean(row.get_text())
+        confirmed = "bestätigt" in row_text.lower() and "bestätigen" not in row_text.lower()
+        courses.append(CourseGradesDto(course=name, course_token=token, average=average, confirmed=confirmed, exams=[]))
+
+    return GradesPageDto(student=student, courses=courses)
+
     # Map each nested detail table to the course row that precedes it.
     detail_by_course_id: dict[int, Tag] = {}
     for detail in outer.find_all("table"):

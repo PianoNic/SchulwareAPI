@@ -55,6 +55,7 @@ class WebAbsenceDto(BaseModel):
     comment: str | None = None       # Kommentar
     trainer_comment: str | None = None   # Kommentar ausbildende Person
     acknowledged_at: str | None = None   # Quittiert am
+    points: int | None = None        # Absenzpunkte (schools that count points instead of excusing)
     reports: list[AbsenceReportDto] = []  # per-lesson Meldungen under this absence
 
 

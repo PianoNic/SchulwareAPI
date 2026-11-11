@@ -1,8 +1,10 @@
 """Absences (Absenzen) page scraper → typed AbsencesPageDto.
 
-Layout: an absences table (11 columns), where each absence row is followed by a
-single-cell row listing the per-lesson "Meldungen" for that absence, then a
-standalone table of lesson reports (Datum / Zeit / Kurs / Bemerkung).
+Layout: an absences table, where each absence row is followed by a single-cell
+row listing the per-lesson "Meldungen" for that absence, then a standalone table
+of lesson reports (Datum / Zeit / Kurs / Bemerkung). Schools choose their own
+absence columns (11 with excusing, or e.g. 5 with "Absenzpunkte"), so columns
+other than the classic 11 are read by their heading.
 """
 
 import re
@@ -14,8 +16,9 @@ from src.application.dtos.web.scrape_dtos import WebAbsenceDto, AbsenceReportDto
 _ABSENCE_HEADER = "Datum von"
 _REPORT_HEADER = "Datum"
 # One Meldung: date, "HH:MM bis HH:MM", course token, remark (until next date/end).
+# Some schools write "17.08.2026, von 13:30 bis 14:15, fra-F.4.d" with no remark.
 _REPORT_RE = re.compile(
-    r"(\d{2}\.\d{2}\.\d{4})\s+(\d{1,2}:\d{2}\s+bis\s+\d{1,2}:\d{2})\s+(\S+)\s+(.+?)(?=\d{2}\.\d{2}\.\d{4}\s+\d{1,2}:\d{2}|$)"
+    r"(\d{2}\.\d{2}\.\d{4}),?\s+(?:von\s+)?(\d{1,2}:\d{2}\s+bis\s+\d{1,2}:\d{2}),?\s+(\S+)\s*(.*?)(?=\d{2}\.\d{2}\.\d{4},?\s+(?:von\s+)?\d{1,2}:\d{2}|$)"
 )
 
 
@@ -38,7 +41,7 @@ def _own_cells(row: Tag, table: Tag) -> list[str]:
 
 def _parse_reports(text: str) -> list[AbsenceReportDto]:
     return [
-        AbsenceReportDto(date=d, time=_clean(t), course=c, remark=_clean(r))
+        AbsenceReportDto(date=d, time=_clean(t), course=c.rstrip(','), remark=_clean(r) or None)
         for d, t, c, r in _REPORT_RE.findall(text)
     ]
 
@@ -50,6 +53,35 @@ def _is_excused(value: str) -> bool | None:
     if v.startswith("nein"):
         return False
     return None
+
+
+# Absence columns by heading; matched by prefix, longest first ("Kommentar ausbildende Person" before "Kommentar").
+_COLUMNS = [
+    ("kommentar ausbildende", "trainer_comment"), ("datum von", "date_from"), ("datum bis", "date_to"),
+    ("grund", "reason"), ("zusatzinfo", "additional_info"), ("zusatzfrist", "extension_deadline"),
+    ("status", "status_eae"), ("entschuldigt", "excused"), ("lektionen", "lessons"),
+    ("absenzpunkte", "points"), ("kommentar", "comment"), ("quittiert", "acknowledged_at"),
+]
+
+
+def _absence_by_header(header: list[str], cells: list[str]) -> WebAbsenceDto:
+    values: dict = {}
+    for name, cell in zip(header, cells):
+        field = next((f for prefix, f in _COLUMNS if name.lower().startswith(prefix)), None)
+        if field is None or field in values:
+            continue
+        if field == "excused":
+            values[field] = _is_excused(cell)
+        elif field in ("lessons", "points"):
+            values[field] = _int(cell)
+        else:
+            values[field] = cell or None
+    absence = WebAbsenceDto(**values)
+    # Some schools put the Meldungen inside a cell instead of a row of their own.
+    for cell in cells:
+        if "Meldungen" in cell:
+            absence.reports = _parse_reports(cell)
+    return absence
 
 
 def scrape_absences(html: str) -> AbsencesPageDto:
@@ -79,7 +111,9 @@ def scrape_absences(html: str) -> AbsencesPageDto:
             i = 1
             while i < len(rows):
                 cells = _own_cells(rows[i], table)
-                if len(cells) >= 11 and re.search(r"\d{2}\.\d{2}\.\d{4}", cells[0]):
+                if len(header) < 11 and len(cells) >= 2 and re.search(r"\d{2}\.\d{2}\.\d{4}", cells[0]):
+                    absences.append(_absence_by_header(header, cells))
+                elif len(cells) >= 11 and re.search(r"\d{2}\.\d{2}\.\d{4}", cells[0]):
                     absence = WebAbsenceDto(
                         date_from=cells[0] or None,
                         date_to=cells[1] or None,
