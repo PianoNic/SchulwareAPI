@@ -123,14 +123,29 @@ class LoginHandler(ICommandHandler[LoginCommand, LoginResponseDto]):
             session_id = web_cookies["PHPSESSID"]
             web_info = web_info or {}
 
-            # 2) Mobile token round-trip → access/refresh tokens.
+            # 2) Mobile token round-trip → access/refresh tokens. Some schools' Microsoft
+            # tenants refuse the Schulnetz mobile app; the web session alone still
+            # serves grades, absences and the timetable, so it is returned instead
+            # of failing the whole login.
             step = "mobile"
-            mob = generate_oauth_url(base, auth_type="mobile")
-            mob_res = await self._login(mob["auth_url"], command, cookies)
-            cookies = mob_res.get("session_cookies") or cookies
-            access_token, refresh_token = await exchange_code_for_tokens(
-                mob_res["code"], mob["code_verifier"], base
-            )
+            try:
+                mob = generate_oauth_url(base, auth_type="mobile")
+                mob_res = await self._login(mob["auth_url"], command, cookies)
+                cookies = mob_res.get("session_cookies") or cookies
+                access_token, refresh_token = await exchange_code_for_tokens(
+                    mob_res["code"], mob["code_verifier"], base
+                )
+            except (NeedsCredentials, MfaRequired, LoginFailed) as ex:
+                _log_failure(step, ex)
+                logger.info("login: web session only, the mobile sign-in was refused")
+                return LoginResponseDto(
+                    success=True,
+                    session_id=session_id,
+                    web_session_user_id=web_info.get("id"),
+                    web_session_trans_id=web_info.get("transid"),
+                    session_cookies=cookies,
+                    message="Signed in to the Schulnetz website only; the school does not allow the Schulnetz mobile app.",
+                )
 
             logger.info("login: php=%s token=%s", bool(session_id), bool(access_token))
 
